@@ -1,0 +1,39 @@
+{
+  "name": "gpra-chord-charts-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing guitar chord charts from Guitar Practice Routine App (GPRA)",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "gpra-chord-charts-mcp": "./dist/stdio.js"
+  },
+  "files": [
+    "dist",
+    "data/common-chords.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:index": "tsx scripts/build-index.ts",
+    "start": "node dist/stdio.js",
+    "start:http": "node dist/http.js",
+    "dev": "tsx src/stdio.ts",
+    "dev:http": "tsx src/http.ts",
+    "test": "node --test test/*.test.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "express": "^5.1.0",
+    "posthog-node": "^5.21.2",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.3",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

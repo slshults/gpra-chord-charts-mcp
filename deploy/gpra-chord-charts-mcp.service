@@ -1,0 +1,41 @@
+# Install to /etc/systemd/system/gpra-chord-charts-mcp.service
+#
+# POSTHOG_API_KEY (optional) goes in a gitignored .env next to the code rather
+# than in this unit file. Port 3030 by default — change it if something else
+# already holds that port.
+[Unit]
+Description=GPRA chord charts MCP server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/gpra-chord-charts-mcp
+Environment=PORT=3030
+# Keeps Express from rendering stack traces on parse errors. The app also has
+# its own error handler so a missing line here can't leak paths, but both.
+Environment=NODE_ENV=production
+EnvironmentFile=-/home/ubuntu/gpra-chord-charts-mcp/.env
+ExecStart=/usr/bin/node dist/http.js
+Restart=always
+RestartSec=5
+KillMode=mixed
+# The app closes its own connections on SIGTERM; this is the backstop if it
+# ever can't. Default is 90s, which would stall every deploy on one stuck socket.
+TimeoutStopSec=15
+
+# Sandbox. The process only reads a bundled JSON file and makes outbound HTTPS,
+# so it needs no write access anywhere. `ubuntu` is a sudoer, which is why
+# NoNewPrivileges matters here.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

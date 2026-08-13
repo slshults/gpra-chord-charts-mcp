@@ -1,0 +1,25 @@
+# Secret scanning, so nothing credential-shaped reaches a public repo.
+#
+#   pip install pre-commit detect-secrets
+#   detect-secrets scan > .secrets.baseline
+#   pre-commit install
+#
+# False positive? Re-baseline with:
+#   detect-secrets scan --baseline .secrets.baseline
+repos:
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package-lock\.json|data/common-chords\.json
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        # The chord snapshot is ~3.3 MB and ships on purpose.
+        args: ['--maxkb=4096']
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
