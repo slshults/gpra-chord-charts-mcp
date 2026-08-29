@@ -59,6 +59,9 @@ app.get('/chart/:file', async (req, res) => {
 
   res
     .type('image/png')
+    // A plain <img> load needs no CORS, but a client that fetches the bytes or
+    // sets crossorigin does. It's a public read-only image; nothing to protect.
+    .set('Access-Control-Allow-Origin', '*')
     .set('Cache-Control', 'public, max-age=31536000, immutable')
     .set('Content-Disposition', `inline; filename="${chord.name.replace(/[^\w#-]/g, '_')}.png"`)
     .send(png);
