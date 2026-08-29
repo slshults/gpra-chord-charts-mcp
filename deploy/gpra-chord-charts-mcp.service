@@ -1,7 +1,7 @@
 # Install to /etc/systemd/system/gpra-chord-charts-mcp.service
 #
 # POSTHOG_API_KEY (optional) goes in a gitignored .env next to the code rather
-# than in this unit file. Port 3030 by default — change it if something else
+# than in this unit file. Port 2112 by default — change it if something else
 # already holds that port.
 [Unit]
 Description=GPRA chord charts MCP server
@@ -12,7 +12,7 @@ Type=simple
 User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/gpra-chord-charts-mcp
-Environment=PORT=3030
+Environment=PORT=2112
 # Keeps Express from rendering stack traces on parse errors. The app also has
 # its own error handler so a missing line here can't leak paths, but both.
 Environment=NODE_ENV=production

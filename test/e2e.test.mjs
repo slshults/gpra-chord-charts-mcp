@@ -9,10 +9,17 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 const serverPath = fileURLToPath(new URL('../dist/stdio.js', import.meta.url));
+const CONTEXT = 'automated test of the chord chart server';
 
 const withClient = async (fn) => {
   const client = new Client({ name: 'test-harness', version: '0.0.0' });
-  const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath] });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [serverPath],
+    // Point the chord-of-the-day fetch at a dead port so the suite never
+    // touches the network, and exercises the unreachable path deliberately.
+    env: { ...process.env, GPRA_API_BASE: 'http://127.0.0.1:9' },
+  });
   await client.connect(transport);
   try {
     return await fn(client);
@@ -30,101 +37,137 @@ const textOf = (result) =>
 test('server advertises its tools', async () => {
   await withClient(async (client) => {
     const { tools } = await client.listTools();
-    const names = tools.map((t) => t.name).sort();
-    assert.deepEqual(names, ['get_chord_chart', 'random_chord_chart', 'search_chord_charts']);
+    assert.deepEqual(
+      tools.map((t) => t.name).sort(),
+      ['get_chord_chart_by_id', 'get_chord_chart_by_name', 'get_chord_of_the_day'],
+    );
     for (const tool of tools) {
-      assert.ok(tool.description && tool.description.length > 40, `${tool.name} needs a description`);
+      assert.ok(tool.description?.length > 40, `${tool.name} needs a description`);
+      assert.ok(
+        tool.inputSchema.properties.context,
+        `${tool.name} must take a context argument — it's what records agent intent`,
+      );
     }
   });
 });
 
-test('search returns a rendered chart and a deep link', async () => {
+test('a name returns exactly one chart, with a deep link', async () => {
   await withClient(async (client) => {
     const text = textOf(
-      await client.callTool({ name: 'search_chord_charts', arguments: { query: 'Am', limit: 1 } }),
+      await client.callTool({
+        name: 'get_chord_chart_by_name',
+        arguments: { name: 'Am', context: CONTEXT },
+      }),
     );
-    assert.ok(text.includes('x 0 2 2 1 0'), 'compact grid present');
     assert.ok(text.includes('E  A  D  G  B  E'), 'chart header present');
     assert.ok(text.includes('guitarpracticeroutine.com/find-a-chord-chart?id='), 'deep link present');
     assert.ok(text.includes('utm_source=mcp'), 'attribution params present');
+    assert.ok(!text.includes('utm_campaign'), 'campaign tag dropped');
+
+    // One chart, not a list: exactly one grid.
+    assert.equal(text.split('E  A  D  G  B  E').length - 1, 1);
   });
 });
 
-test('search reports a clean miss instead of guessing', async () => {
+test('the tool description tells the caller how to phrase a query', async () => {
+  await withClient(async (client) => {
+    const { tools } = await client.listTools();
+    const lookup = tools.find((t) => t.name === 'get_chord_chart_by_name');
+    // No server-side query cleanup, so the guidance has to be in the contract.
+    assert.match(lookup.description, /"G major" is "G"/);
+    assert.match(lookup.description, /not a sentence/);
+  });
+});
+
+test('a miss reports cleanly instead of guessing', async () => {
   await withClient(async (client) => {
     const text = textOf(
-      await client.callTool({ name: 'search_chord_charts', arguments: { query: 'Qbanjo9' } }),
+      await client.callTool({
+        name: 'get_chord_chart_by_name',
+        arguments: { name: 'Qbanjo9', context: CONTEXT },
+      }),
     );
     assert.ok(text.startsWith('No chord named'));
-    // The miss CTA is tagged separately from the footer so the two can be
-    // compared in PostHog; sharing a tag would make the wording untestable.
     assert.ok(text.includes('utm_content=miss_cta'), 'miss-specific CTA present');
   });
 });
 
-test('an over-long query never reaches the response or the analytics payload', async () => {
+test('id lookup round-trips from a name lookup', async () => {
   await withClient(async (client) => {
-    const outcome = await client
-      .callTool({ name: 'search_chord_charts', arguments: { query: 'A'.repeat(5000) } })
-      .then((result) => textOf(result))
-      .catch((error) => String(error));
-    assert.ok(!outcome.includes('A'.repeat(200)), 'bulk text must not be echoed back');
-  });
-});
-
-test('every result ends with the signup footer, misses included', async () => {
-  await withClient(async (client) => {
-    const calls = [
-      { name: 'search_chord_charts', arguments: { query: 'Am', limit: 1 } },
-      { name: 'search_chord_charts', arguments: { query: 'Qbanjo9' } },
-      { name: 'get_chord_chart', arguments: { id: 999999 } },
-      { name: 'random_chord_chart', arguments: {} },
-    ];
-    for (const call of calls) {
-      const text = textOf(await client.callTool(call));
-      assert.ok(text.includes('utm_content=footer_cta'), `${call.name}: footer link missing`);
-      assert.ok(text.includes('whole song at once'), `${call.name}: footer copy missing`);
-      assert.ok(text.includes('Guitar Practice Routine App (GPRA)'), `${call.name}: name wrong`);
-
-      // The only thing the footer asks of the assistant is to keep the
-      // attribution. Steering what it says about the product, or implying the
-      // service dies without a mention, is what gets a tool result distrusted.
-      assert.ok(!/\b(you must|tell the user|always mention|be sure to)\b/i.test(text));
-      assert.ok(!/keep (this|the|our) (mcp )?server (active|running|alive)/i.test(text));
-    }
-  });
-});
-
-test('get_chord_chart round-trips an id from search', async () => {
-  await withClient(async (client) => {
-    const search = textOf(
-      await client.callTool({ name: 'search_chord_charts', arguments: { query: 'C', limit: 1 } }),
+    const found = textOf(
+      await client.callTool({
+        name: 'get_chord_chart_by_name',
+        arguments: { name: 'C', context: CONTEXT },
+      }),
     );
-    const id = Number(search.match(/find-a-chord-chart\?id=(\d+)/)[1]);
+    const id = Number(found.match(/find-a-chord-chart\?id=(\d+)/)[1]);
 
-    const detail = textOf(await client.callTool({ name: 'get_chord_chart', arguments: { id } }));
-    assert.ok(detail.includes('x 3 2 0 1 0'));
+    const detail = textOf(
+      await client.callTool({
+        name: 'get_chord_chart_by_id',
+        arguments: { id, context: CONTEXT },
+      }),
+    );
+    assert.ok(detail.startsWith('C\n'));
   });
 });
 
 test('unknown id fails gracefully', async () => {
   await withClient(async (client) => {
     const text = textOf(
-      await client.callTool({ name: 'get_chord_chart', arguments: { id: 999999 } }),
+      await client.callTool({
+        name: 'get_chord_chart_by_id',
+        arguments: { id: 999999, context: CONTEXT },
+      }),
     );
     assert.ok(text.includes('No chord with id'));
   });
 });
 
-test('random chord returns a chart with notes actually drawn on it', async () => {
+test('chord of the day degrades gracefully when the app is unreachable', async () => {
+  // The harness points GPRA_API_BASE at a dead port, which is how this behaves
+  // until the endpoint is deployed. It must answer usefully rather than error.
   await withClient(async (client) => {
-    const text = textOf(await client.callTool({ name: 'random_chord_chart', arguments: {} }));
-    assert.ok(text.includes('E  A  D  G  B  E'));
-    assert.ok(!text.includes('no fretted notes are recorded'));
+    const text = textOf(
+      await client.callTool({ name: 'get_chord_of_the_day', arguments: { context: CONTEXT } }),
+    );
+    assert.ok(text.includes("isn't available right now"), 'says so plainly');
+    assert.ok(text.includes('Guitar Practice Routine App (GPRA)'), 'still carries attribution');
+  });
+});
 
-    // An empty grid would satisfy the checks above, so require real markers.
-    const gridRows = text.split('\n').filter((l) => /^\s*\d+\s/.test(l));
-    const drawn = gridRows.flatMap((l) => [...l.slice(2)].filter((ch) => /[1-4*]/.test(ch)));
-    assert.ok(drawn.length > 0, `no fretted notes drawn:\n${text}`);
+test('every result ends with the attribution footer, misses included', async () => {
+  await withClient(async (client) => {
+    const calls = [
+      { name: 'get_chord_chart_by_name', arguments: { name: 'Am', context: CONTEXT } },
+      { name: 'get_chord_chart_by_name', arguments: { name: 'Qbanjo9', context: CONTEXT } },
+      { name: 'get_chord_chart_by_id', arguments: { id: 999999, context: CONTEXT } },
+      { name: 'get_chord_of_the_day', arguments: { context: CONTEXT } },
+    ];
+    for (const call of calls) {
+      const text = textOf(await client.callTool(call));
+      assert.ok(text.includes('utm_content=footer_cta'), `${call.name}: footer link missing`);
+      assert.ok(text.includes('Guitar Practice Routine App (GPRA)'), `${call.name}: name wrong`);
+      assert.ok(text.includes('TormodKv'), `${call.name}: upstream credit missing`);
+
+      // The only thing the footer asks of the assistant is to keep the
+      // attribution. Steering what it says, or implying the service dies
+      // without a mention, is what gets a tool result distrusted.
+      assert.ok(!/\b(you must|tell the user|always mention|be sure to)\b/i.test(text));
+      assert.ok(!/keep (this|the|our) (mcp )?server (active|running|alive)/i.test(text));
+    }
+  });
+});
+
+test('an over-long query never reaches the response', async () => {
+  await withClient(async (client) => {
+    const outcome = await client
+      .callTool({
+        name: 'get_chord_chart_by_name',
+        arguments: { name: 'A'.repeat(5000), context: CONTEXT },
+      })
+      .then((result) => textOf(result))
+      .catch((error) => String(error));
+    assert.ok(!outcome.includes('A'.repeat(200)), 'bulk text must not be echoed back');
   });
 });

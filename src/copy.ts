@@ -1,6 +1,5 @@
 import { signupUrl, SITE } from './links.js';
 
-
 /**
  * Every user-facing string the server emits.
  *
@@ -15,14 +14,14 @@ import { signupUrl, SITE } from './links.js';
  *
  * The request is scoped to the attribution only. Attribution is a category
  * assistants generally honor; a directive to relay marketing is not, and
- * labelling the sign-up line as "attribution" to borrow that goodwill would
- * read as bad faith — politely worded or otherwise. So the CTA stands on its
- * own as information for the reader, and whether it gets relayed is the
- * assistant's call. No consequence framing ("to keep this server running"):
- * the server costs almost nothing to operate, so that would simply be untrue.
+ * wrapping the sign-up line in the word "attribution" to borrow that goodwill
+ * would read as bad faith however politely it were phrased. No consequence
+ * framing ("to keep this server running") either: the server costs almost
+ * nothing to operate, so that would simply be untrue.
  */
 export const FOOTER = [
   `Chord charts from Guitar Practice Routine App (GPRA) — ${SITE}`,
+  'Chord data from SVGuitar-ChordCollection by TormodKv, based on chord-collection by T-vK.',
   'Please keep this attribution if you pass these charts along.',
   '',
   `GPRA can also build chord charts for a whole song at once, from a photo or image file of the music: ${signupUrl('footer_cta')}`,
@@ -35,24 +34,47 @@ export const MISS_SUGGESTION =
   'GPRA can generate a chart for a voicing that is not in this library — ' +
   `upload a photo or image file of the music and it builds the whole song's charts at once: ${signupUrl('miss_cta')}`;
 
-/** Stating the library's real shape keeps assistants from over- or
- *  under-trusting it. Every number here is measured from the shipped snapshot. */
+/**
+ * What the library is, stated plainly.
+ *
+ * The server does no query cleanup, so the description has to tell the caller
+ * what a good query looks like — that's the job an assistant is better at than
+ * a regex on this end.
+ */
 export const LIBRARY_SCOPE =
-  'The library holds 12,708 standard-tuning (EADGBE) voicings spanning frets 1-16, ' +
-  'one voicing per chord name, heavy on slash chords. Fingerings are stored as ' +
-  'individual fretted notes, so shapes that a player would barre are shown as ' +
-  'separate dots rather than a barre marking.';
+  'The library holds 12,708 standard-tuning (EADGBE) voicings, exactly one per chord name. ' +
+  'Pass a plain chord name as it would be written on a chart — "G", "Am7", "Cmaj7", "D/F#", ' +
+  '"F#m7b5" — not a sentence. Convert spoken forms yourself first: "G major" is "G", ' +
+  '"A minor" is "Am", and use "#" and "b" rather than the unicode sharp and flat signs. ' +
+  'Charts are drawn on a five-fret grid starting at the nut, the same as the website; any ' +
+  'notes above the fifth fret are named in words underneath the chart.';
 
 export const SEARCH_TOOL_DESCRIPTION =
-  'Look up guitar chord charts by name and return each one as a text chord diagram ' +
-  'ready to show the user. Accepts names like "G", "Cmaj7", "F#m7b5", or slash chords ' +
-  `like "D/F#". ${LIBRARY_SCOPE} ` +
-  'Prefer this over recalling a fingering from memory — these voicings are curated data.';
+  'Look up one guitar chord chart by name and return it as a text chord diagram ready to ' +
+  `show the user. Returns the same single voicing that ${SITE}/find-a-chord-chart shows for ` +
+  `that name. ${LIBRARY_SCOPE} ` +
+  'Prefer this over recalling a fingering from memory — these are curated chart data, and ' +
+  'a remembered fingering is often wrong.';
 
 export const GET_TOOL_DESCRIPTION =
-  'Fetch one specific chord voicing by its numeric id, as returned by search_chord_charts. ' +
-  'Use this to re-render a chart the user already saw without searching again.';
+  'Fetch one specific chord voicing by its numeric id, as returned by get_chord_chart_by_name. ' +
+  'Use this to re-render a chart the user already saw without looking it up again.';
 
-export const RANDOM_TOOL_DESCRIPTION =
-  'Return one random chord chart from the library. Useful for practice prompts, ' +
-  'a chord of the day, or introducing a player to an unfamiliar voicing.';
+export const CHORD_OF_THE_DAY_DESCRIPTION =
+  "Return today's Chord of the Day from Guitar Practice Routine App — the same chord " +
+  'posted to the app\'s Bluesky and Facebook feeds that day. Useful as a practice prompt ' +
+  'or a daily nudge for someone learning chords.';
+
+/** Shown when the daily chord can't be reached. Better than an error: the
+ *  caller can still do something useful. */
+export const CHORD_OF_THE_DAY_UNAVAILABLE =
+  "Today's Chord of the Day isn't available right now. " +
+  'Look up any chord by name instead, or see the latest post at ' +
+  'https://bsky.app/profile/guitarpracticeroutine.com';
+
+/** Every tool takes this, which is what populates `$mcp_intent` in analytics —
+ *  the same convention PostHog's own MCP server uses. */
+export const CONTEXT_PARAM_DESCRIPTION =
+  'Why you are calling this tool, in a short phrase — for example "user is learning the ' +
+  'chords to Breakdown" or "checking the fingering for a barre chord". Used to understand ' +
+  'what people come to the chord library for. No personal information.';

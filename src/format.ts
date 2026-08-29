@@ -1,23 +1,28 @@
-import { frettedFrets, hasFrettedNotes, type Barre, type Chord, type Finger } from './types.js';
+import { hasFrettedNotes, type Barre, type Chord, type Finger } from './types.js';
 
 /**
  * Text rendering of a chord chart.
  *
- * Orientation matches the charts on guitarpracticeroutine.com and standard
- * guitar convention: frets run top to bottom (fret 1 nearest the nut), and
- * string 1 — the highest-pitched string — is the RIGHTMOST column. So the
- * columns read low-to-high pitch left to right, like looking at a guitar
- * held up facing you.
+ * This deliberately mirrors what guitarpracticeroutine.com/find-a-chord-chart
+ * draws, rather than improving on it: a fixed five-fret grid with the nut at
+ * the top, frets counted downward from the nut, and string 1 — the
+ * highest-pitched string — in the RIGHTMOST column. The app renders SVGuitar
+ * with `numFrets: 5` and `startingFret: 1` on every chart and does not attempt
+ * to render a starting fret; that was a deliberate product decision.
+ *
+ * The one thing this adds: the app silently drops notes above fret 5 (they are
+ * emitted below the SVG viewBox and clipped away), which makes a chord look
+ * like a different, smaller chord. A text chart can say what a picture can't,
+ * so notes outside the grid are named underneath instead of vanishing.
  */
 
 const COL_START = 4;
 const COL_STEP = 3;
 const LABEL_WIDTH = 2;
-const MIN_ROWS = 4;
 
-/** A chord reaching no higher than this keeps the nut in view, so low voicings
- *  are drawn in their familiar open-position form rather than floating. */
-const NUT_PROXIMITY = 3;
+/** The app's SVGuitar config: five fret rows, always starting at the nut. */
+const GRID_ROWS = 5;
+const FIRST_FRET = 1;
 
 /** Marker used for a fretted note whose finger number isn't recorded. */
 const PLAIN_DOT = '*';
@@ -25,10 +30,8 @@ const PLAIN_DOT = '*';
 const colFor = (stringNumber: number, numStrings: number): number =>
   COL_START + (numStrings - stringNumber) * COL_STEP;
 
-const lineWidth = (numStrings: number): number => colFor(1, numStrings) + 2;
-
 const blank = (numStrings: number): string[] =>
-  new Array(lineWidth(numStrings)).fill(' ');
+  new Array(colFor(1, numStrings) + 2).fill(' ');
 
 const putAt = (line: string[], col: number, text: string): void => {
   for (let i = 0; i < text.length; i += 1) {
@@ -53,6 +56,19 @@ const eachStringCol = (
 const fillRule = (line: string[], numStrings: number, char: string): void =>
   fill(line, COL_START - 1, colFor(1, numStrings) + 1, char);
 
+/**
+ * Whether a fret NUMBER falls inside the drawn grid.
+ *
+ * Everything in this module reasons about fret numbers and string numbers only,
+ * never about pitch. That distinction is load-bearing on a guitar: "higher" is
+ * ambiguous between a larger fret number and a higher-pitched note, and the two
+ * don't correspond — the same fret number sounds a different pitch on every
+ * string, and which string carries a chord's lowest-pitched note depends on the
+ * voicing and the tuning. Naming things `onGrid`/`maxFretNumber` rather than
+ * `high`/`low` keeps that confusion out of the code.
+ */
+const onGrid = (fret: number): boolean => fret >= FIRST_FRET && fret < FIRST_FRET + GRID_ROWS;
+
 const barreCovers = (barre: Barre, stringNumber: number): boolean =>
   stringNumber >= Math.min(barre.fromString, barre.toString) &&
   stringNumber <= Math.max(barre.fromString, barre.toString);
@@ -64,28 +80,15 @@ const fingerOn = (chord: Chord, stringNumber: number): Finger | undefined =>
     .sort((a, b) => a.fret - b.fret)[0];
 
 /**
- * Which frets the chart covers.
+ * Names a string for prose.
  *
- * Derived from the notes themselves. The source rows carry `startingFret: 1`
- * and `numFrets: 5` on every single record while actual fingerings run up to
- * fret 16, so those fields are defaults rather than measurements — trusting
- * them silently dropped every note past the fifth fret. They aren't even
- * carried on `Chord` any more.
+ * Always leads with the string NUMBER, because the open-note letter alone is
+ * ambiguous: in standard tuning both string 6 and string 1 are E, and 2,938 of
+ * the voicings with off-grid notes have one on a string whose letter is shared.
+ * "E string, fret 7" could mean either end of the neck.
  */
-export interface FretWindow {
-  firstFret: number;
-  rows: number;
-}
-
-export const displayWindow = (chord: Chord): FretWindow => {
-  const frets = frettedFrets(chord);
-  if (frets.length === 0) return { firstFret: 1, rows: MIN_ROWS };
-
-  const lowest = Math.min(...frets);
-  const highest = Math.max(...frets);
-  const firstFret = lowest <= NUT_PROXIMITY ? 1 : lowest;
-  return { firstFret, rows: Math.max(MIN_ROWS, highest - firstFret + 1) };
-};
+const stringLabel = (chord: Chord, stringNumber: number): string =>
+  `string ${stringNumber} (${chord.tuning[chord.numStrings - stringNumber] ?? '?'})`;
 
 const markerFor = (chord: Chord, stringNumber: number): string => {
   if (chord.mutedStrings.includes(stringNumber)) return 'x';
@@ -93,27 +96,8 @@ const markerFor = (chord: Chord, stringNumber: number): string => {
   return ' ';
 };
 
-/**
- * The universal one-line chord grid: one value per string, low pitch to high.
- * `x` muted, `0` open, a number = fret. e.g. G -> "3 x 0 0 3 3".
- */
-export const compactNotation = (chord: Chord): string => {
-  const cells: string[] = [];
-  for (let d = 0; d < chord.numStrings; d += 1) {
-    const stringNumber = chord.numStrings - d;
-    const finger = fingerOn(chord, stringNumber);
-    const barre = chord.barres.find((b) => barreCovers(b, stringNumber));
-
-    if (finger) cells.push(String(finger.fret));
-    // An explicit mute wins over a barre: barring across a string you also
-    // damp is a real shape, and the mute is the more important instruction.
-    else if (chord.mutedStrings.includes(stringNumber)) cells.push('x');
-    else if (barre) cells.push(String(barre.fret));
-    else if (chord.openStrings.includes(stringNumber)) cells.push('0');
-    else cells.push('-');
-  }
-  return cells.join(' ');
-};
+const markerForFinger = (finger: number | undefined): string =>
+  finger === undefined ? PLAIN_DOT : String(finger);
 
 const headerLine = (chord: Chord): string => {
   const line = blank(chord.numStrings);
@@ -128,12 +112,10 @@ const markerLine = (chord: Chord): string => {
   return line.join('').trimEnd();
 };
 
-/** Double rule for the nut, plain rule plus a position label further up. */
-const nutLine = (chord: Chord, fretWindow: FretWindow): string => {
+const nutLine = (chord: Chord): string => {
   const line = blank(chord.numStrings);
-  fillRule(line, chord.numStrings, fretWindow.firstFret === 1 ? '=' : '-');
-  const rule = line.join('').trimEnd();
-  return fretWindow.firstFret === 1 ? rule : `${rule}  ${fretWindow.firstFret}fr`;
+  fillRule(line, chord.numStrings, '=');
+  return line.join('').trimEnd();
 };
 
 const fretRow = (chord: Chord, fret: number): string => {
@@ -156,9 +138,6 @@ const fretRow = (chord: Chord, fret: number): string => {
   return line.join('').trimEnd();
 };
 
-const markerForFinger = (finger: number | undefined): string =>
-  finger === undefined ? PLAIN_DOT : String(finger);
-
 const ruleLine = (chord: Chord): string => {
   const line = blank(chord.numStrings);
   fillRule(line, chord.numStrings, '-');
@@ -166,19 +145,36 @@ const ruleLine = (chord: Chord): string => {
   return line.join('').trimEnd();
 };
 
-/** The chord box itself, without surrounding prose. */
-export const renderChordBox = (chord: Chord, fretWindow = displayWindow(chord)): string => {
-  const lines = [headerLine(chord), markerLine(chord), nutLine(chord, fretWindow)];
-
-  for (let r = 0; r < fretWindow.rows; r += 1) {
-    lines.push(fretRow(chord, fretWindow.firstFret + r));
+/** The chord box itself — always the app's five-fret, nut-at-top grid. */
+export const renderChordBox = (chord: Chord): string => {
+  const lines = [headerLine(chord), markerLine(chord), nutLine(chord)];
+  for (let r = 0; r < GRID_ROWS; r += 1) {
+    lines.push(fretRow(chord, FIRST_FRET + r));
     lines.push(ruleLine(chord));
   }
-
   return lines.join('\n');
 };
 
-/** Anything drawn without a finger number, whether a single note or a barre. */
+/**
+ * Notes this library records above the fifth fret, described in words.
+ *
+ * The app's grid can't show these and drops them without saying so. Naming them
+ * keeps the chart honest without introducing starting-fret rendering, which is
+ * the thing that was deliberately left to the user.
+ */
+const offGridNotes = (chord: Chord): string[] => {
+  const notes = chord.fingers
+    .filter((f) => !onGrid(f.fret))
+    .sort((a, b) => a.fret - b.fret || b.string - a.string)
+    .map((f) => `${stringLabel(chord, f.string)} fret ${f.fret}`);
+
+  const barres = chord.barres
+    .filter((b) => !onGrid(b.fret))
+    .map((b) => `barre at fret ${b.fret}`);
+
+  return [...notes, ...barres];
+};
+
 const anyPlainDots = (chord: Chord): boolean =>
   chord.fingers.some((f) => f.finger === undefined) ||
   chord.barres.some((b) => b.finger === undefined);
@@ -196,27 +192,32 @@ const legendFor = (chord: Chord): string => {
   return parts.join('   ');
 };
 
-/** Full text block for one chord: heading, one-line grid, chart, legend. */
+/** Full text block for one chord: heading, chart, legend, any off-grid notes. */
 export const renderChord = (chord: Chord): string => {
-  const fretWindow = displayWindow(chord);
-  const position =
-    fretWindow.firstFret === 1 ? 'open position' : `${fretWindow.firstFret}fr position`;
   const capo = chord.capo > 0 ? ` · capo ${chord.capo}` : '';
+  const offGrid = offGridNotes(chord);
 
+  const trailer: string[] = [];
+  if (offGrid.length > 0) {
+    trailer.push(
+      '',
+      `Also fretted, past this five-fret grid: ${offGrid.join(', ')}.`,
+      'Charts here start at the nut, so those notes sit below the grid.',
+    );
+  }
   // A handful of source rows record no fretted notes at all. Rendering the bare
   // grid without saying so would look like a chord you strum entirely open.
-  const empty = hasFrettedNotes(chord)
-    ? []
-    : ['', 'Note: no fretted notes are recorded for this voicing.'];
+  if (!hasFrettedNotes(chord)) {
+    trailer.push('', 'Note: no fretted notes are recorded for this voicing.');
+  }
 
   return [
     `${chord.name}`,
-    `${compactNotation(chord)}   (low to high: ${chord.tuning.split('').join(' ')})`,
     '',
-    renderChordBox(chord, fretWindow),
+    renderChordBox(chord),
     '',
     legendFor(chord),
-    `${chord.tuning} · ${position}${capo}`,
-    ...empty,
+    `${chord.tuning}${capo}`,
+    ...trailer,
   ].join('\n');
 };

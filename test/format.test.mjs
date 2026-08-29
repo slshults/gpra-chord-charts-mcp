@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { classifyCaller } from '../dist/analytics.js';
-import { compactNotation, renderChordBox, renderChord } from '../dist/format.js';
+import { renderChordBox, renderChord } from '../dist/format.js';
 import { normalizeChord } from '../dist/normalize.js';
-import { normalizeQuery, searchChords } from '../dist/search.js';
-import { loadChords, randomChord } from '../dist/data.js';
-import { hasFrettedNotes } from '../dist/types.js';
+import { findChord } from '../dist/search.js';
+import { loadChords, lookupChord } from '../dist/data.js';
 
 const chords = loadChords();
 const byName = (name) => {
@@ -14,55 +12,13 @@ const byName = (name) => {
   return found;
 };
 
-test('compact notation matches known fingerings, low string to high', () => {
-  assert.equal(compactNotation(byName('Am')), 'x 0 2 2 1 0');
-  assert.equal(compactNotation(byName('C')), 'x 3 2 0 1 0');
-  assert.equal(compactNotation(byName('Em')), '0 2 2 0 0 0');
-  assert.equal(compactNotation(byName('F')), '1 3 3 2 1 1');
-});
-
-test('chord box puts string 1 (high E) in the rightmost column', () => {
-  // D: x x 0 2 3 2 — the high E is fretted at 2, the low two strings muted.
-  const lines = renderChordBox(byName('D')).split('\n');
-  const header = lines[0];
-  const markers = lines[1];
-
-  assert.equal(header.trimEnd().slice(-1), 'E');
-  // Muted markers sit on the left (low strings), not the right.
-  assert.equal(markers.trimStart()[0], 'x');
-  assert.ok(!markers.trimEnd().endsWith('x'));
-});
-
 // String columns, left to right = low E to high E.
 const STRING_COLS = [4, 7, 10, 13, 16, 19];
 /** Grid rows are the ones prefixed with a right-aligned fret number. */
 const isGridRow = (line) => /^\s*\d+\s/.test(line);
+const cellsOf = (line) => STRING_COLS.map((col) => line[col] ?? ' ');
 const gridRowFor = (lines, fret) =>
   lines.find((l) => isGridRow(l) && Number(l.slice(0, 2).trim()) === fret);
-/** The six string cells of a grid row, low string first. */
-const cellsOf = (line) => STRING_COLS.map((col) => line[col] ?? ' ');
-
-test('chord box rows are labelled by fret and hold the right notes', () => {
-  // C is x 3 2 0 1 0, fingered 3rd on the A string, 2nd on D, 1st on B.
-  const lines = renderChordBox(byName('C')).split('\n');
-
-  assert.deepEqual(cellsOf(gridRowFor(lines, 3)), ['|', '3', '|', '|', '|', '|']);
-  assert.deepEqual(cellsOf(gridRowFor(lines, 2)), ['|', '|', '2', '|', '|', '|']);
-  assert.deepEqual(cellsOf(gridRowFor(lines, 1)), ['|', '|', '|', '|', '1', '|']);
-});
-
-test('columns stay aligned across every grid row of a chart', () => {
-  const lines = renderChordBox(byName('G')).split('\n');
-  const gridRows = lines.filter(isGridRow);
-  assert.ok(gridRows.length >= 4, 'expected at least four fret rows');
-
-  for (const line of gridRows) {
-    for (const cell of cellsOf(line)) {
-      // Every string column carries a glyph — a stray space means a column slipped.
-      assert.notEqual(cell, ' ', `misaligned column in "${line}"`);
-    }
-  }
-});
 
 /** Map every grid cell of a rendered box: "fret:stringNumber" -> glyph. */
 const parseBox = (chord) => {
@@ -76,76 +32,97 @@ const parseBox = (chord) => {
   return cells;
 };
 
-test('every fretted note reaches the chart, and nothing is invented', () => {
-  // Sampled across the whole library rather than a handful of open chords —
-  // a clipped fret window once hid a bug affecting 29% of the data.
+test('the grid always matches the app: five frets, nut at top, no position label', () => {
+  // The website renders SVGuitar with numFrets 5 and startingFret 1 on every
+  // chart. Low chords and high chords must be drawn identically.
+  for (const name of ['Am', 'C', 'F', 'G#m']) {
+    const lines = renderChordBox(byName(name)).split('\n');
+    const gridRows = lines.filter(isGridRow);
+
+    assert.equal(gridRows.length, 5, `${name}: expected exactly five fret rows`);
+    assert.equal(Number(gridRows[0].slice(0, 2).trim()), 1, `${name}: first row is fret 1`);
+    assert.ok(lines.some((l) => l.includes('=====')), `${name}: nut drawn`);
+    assert.ok(!/\d+fr/.test(lines.join('\n')), `${name}: no position label`);
+  }
+});
+
+test('known fingerings land on the right cells', () => {
+  // C is x 3 2 0 1 0 — 3rd on the A string, 2nd on D, 1st on B.
+  const c = parseBox(byName('C'));
+  assert.deepEqual([...STRING_COLS.keys()].map((d) => c.get(`3:${6 - d}`)), ['|', '3', '|', '|', '|', '|']);
+  assert.deepEqual([...STRING_COLS.keys()].map((d) => c.get(`2:${6 - d}`)), ['|', '|', '2', '|', '|', '|']);
+  assert.deepEqual([...STRING_COLS.keys()].map((d) => c.get(`1:${6 - d}`)), ['|', '|', '|', '|', '1', '|']);
+});
+
+/**
+ * Read a chart purely by column position, left to right, using NO string-number
+ * arithmetic. Every other test derives columns the same way the renderer does
+ * (`numStrings - d`), so they'd all pass together if that inversion were
+ * reversed — a mirrored chart looks like a perfectly valid chord, just the
+ * wrong one. This reads the picture the way a person does.
+ */
+const readColumnsLeftToRight = (chord) => {
+  const lines = renderChordBox(chord).split('\n');
+  const markers = lines[1];
+  return STRING_COLS.map((col) => {
+    const marked = markers[col];
+    if (marked === 'x' || marked === 'o') return marked;
+    const row = lines.filter(isGridRow).find((l) => /[1-4*]/.test(l[col] ?? ' '));
+    return row ? row.slice(0, 2).trim() : '-';
+  });
+};
+
+test('columns read thickest string to thinnest, left to right', () => {
+  // Anchored on facts from outside this codebase: read from the thickest
+  // string to the thinnest, D is x x 0 2 3 2 and Am is x 0 2 2 1 0. If the
+  // string-number inversion were reversed these would come back mirrored.
+  assert.deepEqual(readColumnsLeftToRight(byName('D')), ['x', 'x', 'o', '2', '3', '2']);
+  assert.deepEqual(readColumnsLeftToRight(byName('Am')), ['x', 'o', '2', '2', '1', 'o']);
+
+  // The tuning header must agree, and its two E's are distinguished only by
+  // position — leftmost is the thick E, rightmost the thin one.
+  const header = renderChordBox(byName('D')).split('\n')[0];
+  assert.deepEqual(STRING_COLS.map((col) => header[col]), ['E', 'A', 'D', 'G', 'B', 'E']);
+});
+
+test('every on-grid note is drawn and nothing is invented', () => {
   const sample = chords.filter((_, i) => i % 250 === 0);
   assert.ok(sample.length > 40, 'expected a broad sample');
 
   for (const chord of sample) {
-    if (chord.fingers.length === 0) continue;
     const cells = parseBox(chord);
+    const onGrid = chord.fingers.filter((f) => f.fret >= 1 && f.fret <= 5);
 
-    for (const finger of chord.fingers) {
-      const glyph = cells.get(`${finger.fret}:${finger.string}`);
-      assert.ok(
-        glyph !== undefined && glyph !== '|',
-        `${chord.name} (#${chord.id}): note at fret ${finger.fret} string ${finger.string} is missing`,
+    for (const finger of onGrid) {
+      assert.notEqual(
+        cells.get(`${finger.fret}:${finger.string}`),
+        '|',
+        `${chord.name} (#${chord.id}): note at fret ${finger.fret} string ${finger.string} missing`,
       );
     }
-
     const drawn = [...cells.values()].filter((g) => g !== '|' && g !== ' ').length;
     assert.equal(
       drawn,
-      new Set(chord.fingers.map((f) => `${f.fret}:${f.string}`)).size,
+      new Set(onGrid.map((f) => `${f.fret}:${f.string}`)).size,
       `${chord.name} (#${chord.id}): chart shows notes the data doesn't have`,
     );
   }
 });
 
-test('the compact grid and the chart never disagree', () => {
-  // The bug that shipped was two representations of one chord contradicting
-  // each other, so this cross-checks them rather than each against the data.
-  const sample = chords.filter((_, i) => i % 250 === 0);
+test('notes past the fifth fret are named rather than silently dropped', () => {
+  // G#m is 4 6 6 4 4 4 — the two fret-6 notes fall outside the app's grid,
+  // where the website drops them without saying so.
+  const rendered = renderChord(byName('G#m'));
 
-  for (const chord of sample) {
-    const cells = parseBox(chord);
-    const compact = compactNotation(chord).split(' ');
-
-    compact.forEach((cell, d) => {
-      const stringNumber = chord.numStrings - d;
-      if (!/^\d+$/.test(cell)) return; // x, 0 and - aren't drawn in the grid
-      assert.notEqual(
-        cells.get(`${cell}:${stringNumber}`),
-        '|',
-        `${chord.name} (#${chord.id}): grid says fret ${cell} on string ${stringNumber}, chart is empty there`,
-      );
-    });
-  }
+  assert.ok(rendered.includes('past this five-fret grid'), 'off-grid notes announced');
+  assert.ok(rendered.includes('fret 6'), 'the specific fret is named');
+  assert.match(rendered, /string 5 \(A\)/, 'the specific string is named by number');
+  // The grid itself is unchanged — still five rows.
+  assert.equal(renderChordBox(byName('G#m')).split('\n').filter(isGridRow).length, 5);
 });
 
-test('voicings up the neck get their own window and a position label', () => {
-  const high = chords.find((c) => c.fingers.every((f) => f.fret >= 8) && c.fingers.length >= 3);
-  assert.ok(high, 'expected a voicing entirely above the 8th fret');
-
-  const rendered = renderChord(high);
-  const lowest = Math.min(...high.fingers.map((f) => f.fret));
-
-  assert.ok(rendered.includes(`${lowest}fr`), 'position label present');
-  assert.ok(!rendered.includes('open position'), 'not labelled open position');
-  assert.ok(!rendered.includes('=================='), 'no nut drawn away from the nut');
-
-  const cells = parseBox(high);
-  for (const finger of high.fingers) {
-    assert.notEqual(cells.get(`${finger.fret}:${finger.string}`), '|');
-  }
-});
-
-test('a chord reaching the nut keeps the nut in view', () => {
-  const rendered = renderChord(byName('C')); // x 3 2 0 1 0
-  assert.ok(rendered.includes('=================='), 'nut drawn');
-  assert.ok(rendered.includes('open position'));
-  assert.ok(!rendered.includes('fr\n'), 'no position label needed');
+test('a chord entirely inside the grid says nothing about off-grid notes', () => {
+  assert.ok(!renderChord(byName('Am')).includes('past this five-fret grid'));
 });
 
 test('barres render as a connected span across the strings', () => {
@@ -160,28 +137,9 @@ test('barres render as a connected span across the strings', () => {
     tuning: 'EADGBE',
     capo: 0,
   };
-  const lines = renderChordBox(barred).split('\n');
-  const fret1 = gridRowFor(lines, 1);
-
+  const fret1 = gridRowFor(renderChordBox(barred).split('\n'), 1);
   assert.deepEqual(cellsOf(fret1), ['1', '1', '1', '1', '1', '1']);
   assert.ok(fret1.includes('1==1'), 'barre span is connected');
-  // Cells run string 6, 5, 4, 3, 2, 1 — the fret-3 note is on string 4.
-  assert.equal(compactNotation(barred), '1 1 3 1 1 1');
-});
-
-test('an explicit mute outranks a barre in the compact grid', () => {
-  const barredWithMute = {
-    id: 0,
-    name: 'Synthetic',
-    fingers: [],
-    barres: [{ fromString: 1, toString: 6, fret: 1 }],
-    openStrings: [],
-    mutedStrings: [6],
-    numStrings: 6,
-    tuning: 'EADGBE',
-    capo: 0,
-  };
-  assert.equal(compactNotation(barredWithMute), 'x 1 1 1 1 1');
 });
 
 test('fretted notes without finger numbers render as plain dots', () => {
@@ -192,8 +150,7 @@ test('fretted notes without finger numbers render as plain dots', () => {
 });
 
 test('curated chords keep their finger numbers', () => {
-  const rendered = renderChord(byName('Am'));
-  assert.ok(rendered.includes('1 index, 2 middle, 3 ring, 4 pinky'));
+  assert.ok(renderChord(byName('Am')).includes('1 index, 2 middle, 3 ring, 4 pinky'));
 });
 
 test('normalizeChord accepts both stored finger formats', () => {
@@ -215,49 +172,6 @@ test('normalizeChord accepts both stored finger formats', () => {
     order_col: 0,
   });
   assert.deepEqual(objectForm.fingers, [{ string: 3, fret: 1, finger: 1 }]);
-});
-
-test('query normalization folds what an assistant is likely to send', () => {
-  assert.equal(normalizeQuery('  G major chord '), 'g');
-  assert.equal(normalizeQuery('C♯m7'), 'c#m7');
-  assert.equal(normalizeQuery('B♭'), 'bb');
-  assert.equal(normalizeQuery('A minor'), 'am');
-  assert.equal(normalizeQuery('A-minor'), 'am');
-  assert.equal(normalizeQuery('C major 7'), 'c7');
-  assert.equal(normalizeQuery('Cmaj7'), 'cmaj7', 'maj is not major');
-});
-
-test('search ranks the plain chord ahead of exotic names containing it', () => {
-  const results = searchChords(chords, 'G', { limit: 5 });
-  assert.equal(results[0].name, 'G');
-  for (let i = 1; i < results.length; i += 1) {
-    assert.ok(
-      results[i - 1].name.length <= results[i].name.length,
-      `${results[i - 1].name} should not follow ${results[i].name}`,
-    );
-  }
-});
-
-test('a flat or sharp is not offered as an alternative to the natural root', () => {
-  // Ab is a different root than A, so it shouldn't beat Am/A7 for query "A".
-  for (const root of ['A', 'G', 'E', 'B']) {
-    const top = searchChords(chords, root, { limit: 3 }).map((c) => c.name);
-    assert.equal(top[0], root);
-    assert.ok(
-      !top.slice(1).some((n) => n === `${root}b` || n === `${root}#`),
-      `${root} search surfaced an accidental: ${top.join(', ')}`,
-    );
-  }
-});
-
-test('a collapsed nonsense query returns nothing rather than a confident guess', () => {
-  // "minor" normalizes to "m", which would substring-match thousands of chords.
-  assert.deepEqual(searchChords(chords, 'minor', { limit: 3 }), []);
-});
-
-test('search finds slash chords and returns nothing for gibberish', () => {
-  assert.equal(searchChords(chords, 'D/F#', { limit: 1 })[0].name, 'D/F#');
-  assert.deepEqual(searchChords(chords, 'zzzz', { limit: 3 }), []);
 });
 
 test('normalize accepts the recorded barre shape and rejects malformed ones', () => {
@@ -282,44 +196,30 @@ test('normalize drops notes that could not be drawn', () => {
   const chord = normalizeChord({
     id: 1,
     name: 'Bad',
-    chord_data: {
-      fingers: [[5, 2], [99, 2], [0, 1], [4, 0], [3, -1]],
-      numStrings: 6,
-    },
+    chord_data: { fingers: [[5, 2], [99, 2], [0, 1], [4, 0], [3, -1]], numStrings: 6 },
     order_col: 0,
   });
-  // Only the one valid entry survives: string 99 and 0 are off the neck,
-  // fret 0 is an open string not a fretted note, fret -1 is nonsense.
   assert.deepEqual(chord.fingers, [{ string: 5, fret: 2 }]);
 });
 
-test('random chords always have something drawn on them', () => {
-  for (let i = 0; i < 50; i += 1) {
-    assert.ok(hasFrettedNotes(randomChord()));
-  }
+test('lookup returns exactly one chord, exact match winning over substring', () => {
+  assert.equal(lookupChord('G').name, 'G');
+  assert.equal(lookupChord('am7').name, 'Am7', 'match is case-insensitive');
+  assert.equal(lookupChord('D/F#').name, 'D/F#');
+  assert.equal(lookupChord('zzzz'), undefined);
 });
 
-test('caller classification separates vendors, crawlers and scanners', () => {
-  const kind = (userAgent, clientName) =>
-    classifyCaller({ distinctId: 'x', userAgent, clientName });
+test('lookup falls back to substring in library order, like the app', () => {
+  // No chord is literally named "maj13", so this exercises the fallback and
+  // must return the first such row in snapshot order, not a ranked pick.
+  const expected = chords.find((c) => c.name.toLowerCase().includes('maj13'));
+  assert.equal(findChord(chords, 'maj13'), expected);
+});
 
-  assert.equal(kind('Claude-User/1.0'), 'claude');
-  assert.equal(kind('', 'claude-ai'), 'claude');
-  assert.equal(kind('ChatGPT-User/1.0'), 'openai');
-
-  // Vendor crawlers must not land in the vendor buckets.
-  assert.equal(kind('ClaudeBot/1.0 (+claudebot@anthropic.com)'), 'crawler');
-  assert.equal(kind('GPTBot/1.2'), 'crawler');
-
-  assert.equal(kind('', 'cursor-vscode'), 'coding_harness');
-  assert.equal(kind('', 'gemini-cli'), 'coding_harness');
-  assert.equal(kind('SentinelOracle/1.0'), 'scanner');
-  assert.equal(kind('l9explore/1.3.0'), 'scanner');
-  assert.equal(kind('python-httpx/0.27.0'), 'script');
-  assert.equal(kind('okhttp/4.12.0'), 'script');
-  assert.equal(kind('node'), 'unknown');
-
-  // "-ized" words must not be read as the Zed editor.
-  assert.equal(kind('Mozilla/5.0 (compatible; Optimized-Feed/1.0)'), 'unknown');
-  assert.equal(kind('CustomizedAgent/1.0'), 'unknown');
+test('an off-grid note names its string by number, not just its letter', () => {
+  // In standard tuning strings 6 and 1 are both E, so "E string, fret 7" is
+  // ambiguous. 2,938 voicings with off-grid notes hit that case.
+  const am9 = renderChord(byName('Am9'));
+  assert.match(am9, /string 1 \(E\)/, 'string identified by number');
+  assert.ok(!/\bE string\b/.test(am9), 'bare letter naming must not come back');
 });

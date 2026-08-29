@@ -1,15 +1,18 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { capture, newCallerContext, type CallerContext } from './analytics.js';
+import { instrumentServer } from './analytics.js';
+import { chordOfTheDay } from './chord-of-the-day.js';
 import {
+  CHORD_OF_THE_DAY_DESCRIPTION,
+  CHORD_OF_THE_DAY_UNAVAILABLE,
+  CONTEXT_PARAM_DESCRIPTION,
   FOOTER,
   GET_TOOL_DESCRIPTION,
   LIBRARY_SCOPE,
   MISS_SUGGESTION,
-  RANDOM_TOOL_DESCRIPTION,
   SEARCH_TOOL_DESCRIPTION,
 } from './copy.js';
-import { getChordById, randomChord, searchLibrary } from './data.js';
+import { getChordById, lookupChord } from './data.js';
 import { renderChord } from './format.js';
 import { chordUrl, searchUrl } from './links.js';
 import type { Chord } from './types.js';
@@ -18,9 +21,13 @@ export const SERVER_NAME = 'gpra-chord-charts';
 export const SERVER_VERSION = '0.1.0';
 
 /** Long enough for the most baroque slash chord in the library (15 chars) with
- *  room for phrasing like "G major chord"; short enough that the query can't be
- *  used to push bulk text into a tool result or an analytics property. */
+ *  a little room; short enough that the query can't be used to push bulk text
+ *  into a tool result. */
 const MAX_QUERY_CHARS = 64;
+
+/** Present on every tool. The value is read by PostHog's MCP SDK and recorded
+ *  as `$mcp_intent`; nothing in the response depends on it. */
+const contextParam = z.string().max(500).describe(CONTEXT_PARAM_DESCRIPTION);
 
 const chordBlock = (chord: Chord): string =>
   [renderChord(chord), '', `View or edit this chart: ${chordUrl(chord)}`].join('\n');
@@ -31,109 +38,81 @@ const withFooter = (body: string) => ({
   content: [{ type: 'text' as const, text: [body, '', FOOTER].join('\n') }],
 });
 
-/** One shape for every tool so `mcp_tool_called` stays comparable across them. */
-const trackToolCall = (
-  context: CallerContext,
-  tool: string,
-  matches: Chord[],
-  extra: Record<string, unknown> = {},
-): void =>
-  capture(context, 'mcp_tool_called', {
-    tool,
-    match_count: matches.length,
-    top_match: matches[0]?.name ?? null,
-    ...extra,
-  });
-
-export const createServer = (context: CallerContext = newCallerContext(undefined)): McpServer => {
+export const createServer = (): McpServer => {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
   server.registerTool(
-    'search_chord_charts',
+    'get_chord_chart_by_name',
     {
-      title: 'Search chord charts',
+      title: 'Get a chord chart by name',
       description: SEARCH_TOOL_DESCRIPTION,
       inputSchema: {
-        query: z
+        name: z
           .string()
           .min(1)
           .max(MAX_QUERY_CHARS)
-          .describe('Chord name, e.g. "Am7" or "D/F#".'),
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(10)
-          .optional()
-          .describe('How many voicings to return. Defaults to 3.'),
+          .describe('A single chord name as written on a chart, e.g. "Am7" or "D/F#".'),
+        context: contextParam,
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ query, limit }) => {
-      const matches = searchLibrary(query, limit ?? 3);
-      // The query itself is the signal worth keeping: a stream of misses maps
-      // exactly onto the gaps in the chord library.
-      trackToolCall(context, 'search_chord_charts', matches, { query });
+    async ({ name }) => {
+      const chord = lookupChord(name);
 
-      if (matches.length === 0) {
-        capture(context, 'mcp_search_missed', { query });
+      if (!chord) {
         return withFooter(
           [
-            `No chord named "${query}" in the library.`,
+            `No chord named "${name}" in the library.`,
             '',
             LIBRARY_SCOPE,
-            `Browse the full library: ${searchUrl(query)}`,
+            `Browse the full library: ${searchUrl(name)}`,
             '',
             MISS_SUGGESTION,
           ].join('\n'),
         );
       }
 
-      return withFooter(
-        [
-          `${matches.length} match${matches.length === 1 ? '' : 'es'} for "${query}":`,
-          '',
-          matches.map(chordBlock).join('\n\n\n'),
-        ].join('\n'),
-      );
+      return withFooter(chordBlock(chord));
     },
   );
 
   server.registerTool(
-    'get_chord_chart',
+    'get_chord_chart_by_id',
     {
       title: 'Get a chord chart by id',
       description: GET_TOOL_DESCRIPTION,
       inputSchema: {
         id: z.number().int().positive().describe('Numeric chord id.'),
+        context: contextParam,
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ id }) => {
       const chord = getChordById(id);
-      trackToolCall(context, 'get_chord_chart', chord ? [chord] : [], { chord_id: id });
-
       if (!chord) {
-        return withFooter(`No chord with id ${id}. Use search_chord_charts to find one.`);
+        return withFooter(
+          `No chord with id ${id}. Use get_chord_chart_by_name to look one up.`,
+        );
       }
       return withFooter(chordBlock(chord));
     },
   );
 
   server.registerTool(
-    'random_chord_chart',
+    'get_chord_of_the_day',
     {
-      title: 'Random chord chart',
-      description: RANDOM_TOOL_DESCRIPTION,
-      inputSchema: {},
-      annotations: { readOnlyHint: true, openWorldHint: false },
+      title: 'Chord of the day',
+      description: CHORD_OF_THE_DAY_DESCRIPTION,
+      inputSchema: { context: contextParam },
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async () => {
-      const chord = randomChord();
-      trackToolCall(context, 'random_chord_chart', [chord]);
-      return withFooter(chordBlock(chord));
+      const chord = await chordOfTheDay();
+      if (!chord) return withFooter(CHORD_OF_THE_DAY_UNAVAILABLE);
+      return withFooter([`Chord of the Day`, '', chordBlock(chord)].join('\n'));
     },
   );
 
+  instrumentServer(server);
   return server;
 };

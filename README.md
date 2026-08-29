@@ -5,13 +5,13 @@ server that lets MCP-capable AI clients look up guitar chord charts from
 [Guitar Practice Routine App (GPRA)](https://guitarpracticeroutine.com) and show
 them to people as text chord diagrams.
 
-It's a **thin, stateless wrapper** over a bundled snapshot of GPRA's chord
-library — no database, no authentication, no secrets. Every result carries a
-permalink to the chart on the site and an attribution note.
+It serves exactly what
+[guitarpracticeroutine.com/find-a-chord-chart](https://guitarpracticeroutine.com/find-a-chord-chart)
+serves: one chord name in, one chart out, from a bundled snapshot of the same
+chord library. No database, no authentication, no secrets.
 
 ```
 Am
-x 0 2 2 1 0   (low to high: E A D G B E)
 
     E  A  D  G  B  E
     x  o           o
@@ -24,42 +24,42 @@ x 0 2 2 1 0   (low to high: E A D G B E)
    -+--+--+--+--+--+-
  4  |  |  |  |  |  |
    -+--+--+--+--+--+-
+ 5  |  |  |  |  |  |
+   -+--+--+--+--+--+-
 
 x = muted   o = open   digits in grid = fingers (1 index, 2 middle, 3 ring, 4 pinky)
-EADGBE · open position
+EADGBE
 ```
 
-Frets run top to bottom and string 1 — the highest-pitched string — is the
-rightmost column, matching standard guitar chord-box convention.
+Frets run top to bottom from the nut, and string 1 — the highest-pitched
+string — is the rightmost column, matching standard chord-box convention and
+the charts on the site.
 
 ## Tools
 
 | Tool | What it does |
 | --- | --- |
-| `search_chord_charts` | Find voicings by name (`G`, `Cmaj7`, `D/F#`) and render each as a chart. Exact matches rank first, then prefixes, then substrings. Optional `limit` (default 3, max 10). |
-| `get_chord_chart` | One voicing by numeric `id`, as returned by a search. |
-| `random_chord_chart` | A random chart — practice prompts, chord of the day. |
+| `get_chord_chart_by_name` | One chord name (`G`, `Am7`, `D/F#`) → the one chart the website shows for it. |
+| `get_chord_chart_by_id` | The same chart by its numeric id, for re-rendering something already returned. |
+| `get_chord_of_the_day` | Today's Chord of the Day — the same chord GPRA posts to Bluesky and Facebook. |
 
-Each chord is returned three ways in one block: a one-line grid (`x 0 2 2 1 0`,
-low string to high), the chart itself, and a legend. The one-liner survives any
-client that mangles whitespace.
+Every tool takes a `context` argument describing why it's being called. That's
+what populates agent intent in analytics; nothing in the response depends on it.
 
 ## What's in the library
 
-12,708 standard-tuning (EADGBE) voicings spanning **frets 1–16**, one voicing
-per chord name, heavily weighted toward slash chords (11,637 of them). About
-55% reach above the third fret.
+12,708 standard-tuning (EADGBE) voicings, **exactly one per chord name**. This
+server does no fuzzy matching and no query cleanup — it passes the name through
+the same way the website does, so the tool description asks the calling
+assistant to send a plain chord name ("G", not "how do I play G major").
 
-Fingerings are stored as individual fretted notes — no row carries a barre
-marking — so a shape a player would barre is drawn as separate dots. Finger
-numbers exist for only a small hand-curated subset; everything else renders
-fretted notes as plain dots. The tool descriptions say so, so assistants don't
-over-trust the output.
+Charts are drawn on a five-fret grid starting at the nut, matching the site.
+Where a voicing has notes above the fifth fret, they're named in words beneath
+the chart rather than dropped.
 
 ## Connecting a client
 
-Remote MCP means users add a **URL**, no install. In a client that supports
-remote / custom MCP servers (Claude Desktop connectors, etc.), add:
+Remote MCP means users add a **URL**, no install:
 
 ```
 https://mcp.guitarpracticeroutine.com/mcp
@@ -79,7 +79,7 @@ transport:
 }
 ```
 
-For a client that only speaks stdio, bridge to the remote server with
+For a client that only speaks stdio, bridge with
 [`mcp-remote`](https://www.npmjs.com/package/mcp-remote):
 
 ```json
@@ -101,7 +101,7 @@ npm run build
 npm test
 
 npm start          # stdio transport
-npm run start:http # HTTP, listens on 127.0.0.1:3030, POST /mcp (set PORT / HOST)
+npm run start:http # HTTP, listens on 127.0.0.1:2112, POST /mcp (set PORT / HOST)
 ```
 
 Health check: `GET /health` → status, version, chord count.
@@ -126,17 +126,17 @@ npm run build:index
 npm run build && npm test
 ```
 
-`build:index` prints the library's actual fret range and reports data anomalies
-(voicings with no fretted notes, missing finger numbers, probable un-recorded
-barres) rather than quietly normalizing them away.
+`build:index` prints the library's fret range to the terminal and reports data
+anomalies (voicings with no fretted notes, missing finger numbers, notes dropped
+as unplayable) rather than quietly normalizing them away.
 
 ## Privacy
 
-The hosted server at `mcp.guitarpracticeroutine.com` records anonymous usage
-analytics: which tool was called, the chord name searched for, and what kind of
-client made the request (assistant, crawler, scanner…). **No identifier is
-stored and no person profile is created** — each request gets a throwaway random
-id, and caller-supplied fields are truncated.
+The hosted server records anonymous usage analytics through
+[`@posthog/mcp`](https://www.npmjs.com/package/@posthog/mcp): which tool was
+called, how long it took, whether it errored, the calling client's name and
+version, and the `context` string the agent supplied. No personal identifier is
+stored and no person profile is created.
 
 Analytics are off entirely unless `POSTHOG_API_KEY` is set, so running this
 yourself — including over stdio — sends nothing anywhere.
@@ -146,8 +146,25 @@ yourself — including over stdio — sends nothing anywhere.
 `deploy/` contains a systemd unit and an nginx reverse-proxy config, if you want
 to host your own instance.
 
+## Credits
+
+The chord library exists because of other people's work:
+
+- **[SVGuitar-ChordCollection](https://github.com/TormodKv/SVGuitar-ChordCollection)**
+  by [@TormodKv](https://github.com/TormodKv) — the chord database this is built
+  from, itself based on
+  [chord-collection](https://github.com/T-vK/chord-collection) by
+  [@T-vK](https://github.com/T-vK).
+- **[SVGuitar](https://github.com/omnibrain/svguitar)** by
+  [@omnibrain](https://github.com/omnibrain) — the chord-diagram renderer whose
+  data format this uses, and which draws the charts on
+  [guitarpracticeroutine.com](https://guitarpracticeroutine.com). (This server
+  renders text, not SVG.)
+
 ## License
 
-- **Code:** MIT.
-- **Data** served through it: © Guitar Practice Routine App — please keep the
-  attribution that each tool response includes.
+- **Code:** MIT — see `LICENSE`.
+- **Chord data:** the voicings originate from SVGuitar-ChordCollection, which
+  carries no stated licence, so no licence is asserted over them here. The
+  fingerings themselves are factual descriptions of where fingers go on a
+  fretboard. Please credit the projects above if you reuse the data.

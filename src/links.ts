@@ -7,46 +7,37 @@ export const SITE = 'https://guitarpracticeroutine.com';
 export const SHORT_SITE = 'https://gpra.app';
 
 /**
- * Deep link to the public chord-chart page for one voicing.
+ * UTM tags on outbound links.
  *
- * UTM tags follow the same convention as the site's other outbound links, so
- * analytics can attribute traffic that arrives via an AI assistant.
+ * No `utm_campaign` — this isn't advertising, and a campaign name would just be
+ * noise in web analytics. `utm_medium` stays generic because the calling
+ * assistant isn't identifiable at tool-call time on a stateless transport; the
+ * `$mcp_*` events PostHog's MCP SDK emits carry the client name and version
+ * properly, so the link doesn't need to.
  */
+const tags = (content: string): Record<string, string> => ({
+  utm_source: 'mcp',
+  utm_medium: 'ai_assistant',
+  utm_content: content,
+});
+
+/** Deep link to the public chord-chart page for one voicing. */
 export const chordUrl = (chord: Chord): string => {
-  const params = new URLSearchParams({
-    id: String(chord.id),
-    utm_source: 'mcp',
-    utm_medium: 'ai_assistant',
-    utm_campaign: 'chord_chart_mcp',
-    utm_content: chord.name,
-  });
+  const params = new URLSearchParams({ id: String(chord.id), ...tags(chord.name) });
   return `${SITE}/find-a-chord-chart?${params.toString()}`;
 };
 
 /**
- * Landing page for a call to action, tagged so PostHog can tell MCP-sourced
- * signups apart from the per-chart deep links.
+ * Landing page for a call to action.
  *
  * `content` separates the two CTAs: the generic footer, and the line shown when
  * the library has no match. They're worded differently on the theory that the
  * responsive one lands better, and sharing one tag would make that untestable.
  */
-export const signupUrl = (content: 'footer_cta' | 'miss_cta' = 'footer_cta'): string => {
-  const params = new URLSearchParams({
-    utm_source: 'mcp',
-    utm_medium: 'ai_assistant',
-    utm_campaign: 'chord_chart_mcp',
-    utm_content: content,
-  });
-  return `${SHORT_SITE}/?${params.toString()}`;
-};
+export const signupUrl = (content: 'footer_cta' | 'miss_cta' = 'footer_cta'): string =>
+  `${SHORT_SITE}/?${new URLSearchParams(tags(content)).toString()}`;
 
 export const searchUrl = (query: string): string => {
-  const params = new URLSearchParams({
-    chord: query,
-    utm_source: 'mcp',
-    utm_medium: 'ai_assistant',
-    utm_campaign: 'chord_chart_mcp',
-  });
+  const params = new URLSearchParams({ chord: query, ...tags('no_match') });
   return `${SITE}/find-a-chord-chart?${params.toString()}`;
 };
