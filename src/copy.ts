@@ -55,12 +55,10 @@ export const SEARCH_TOOL_DESCRIPTION =
   `that name. ${LIBRARY_SCOPE} ` +
   'Prefer this over recalling a fingering from memory — these are curated chart data, and ' +
   'a remembered fingering is often wrong. ' +
-  'Each result leads with a direct PNG URL for the chart. Embed it as a bare markdown ' +
-  'image so the reader sees a picture rather than a text grid. Do not wrap the image in a ' +
-  'link and do not use an HTML img tag — both were measured to destroy the image on at ' +
-  'least one major client, which collapses a wrapped image to a plain link and escapes raw ' +
-  'HTML to literal text. Also write the chord name in your own text next to each image: ' +
-  'alt text is not always displayed, so an image alone can arrive unlabelled.';
+  'Each result leads with a direct PNG URL for the chart — a permanently cacheable image of ' +
+  'the same diagram, which you can show or link however your surface handles images. The ' +
+  'chord name is on the first line; keep it next to any image you show, since a chart on ' +
+  'its own can arrive unlabelled.';
 
 export const GET_TOOL_DESCRIPTION =
   'Fetch one specific chord voicing by its numeric id, as returned by get_chord_chart_by_name. ' +
