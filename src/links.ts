@@ -7,6 +7,26 @@ export const SITE = 'https://guitarpracticeroutine.com';
 export const SHORT_SITE = 'https://gpra.app';
 
 /**
+ * Where this server answers from, for building chart image URLs.
+ *
+ * Always points at the hosted instance, even for stdio callers — a URL is only
+ * useful if it resolves for whoever the answer is passed on to.
+ */
+const PUBLIC_BASE =
+  process.env.MCP_PUBLIC_BASE_URL ?? 'https://mcp.guitarpracticeroutine.com';
+
+/**
+ * A stable, directly-fetchable PNG of one voicing.
+ *
+ * Pixels inside a tool result are useful to exactly one renderer, and only if
+ * that client happens to surface them. A URL works everywhere else the answer
+ * might end up: an artifact, an HTML page, a markdown image, a saved file, an
+ * API consumer. Cheap to add, and it is the part of the payload that survives
+ * being copied out of the conversation.
+ */
+export const chartImageUrl = (chord: Chord): string => `${PUBLIC_BASE}/chart/${chord.id}.png`;
+
+/**
  * UTM tags on outbound links.
  *
  * No `utm_campaign` — this isn't advertising, and a campaign name would just be

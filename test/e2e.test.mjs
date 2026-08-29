@@ -179,15 +179,15 @@ test('an over-long query never reaches the response', async () => {
   });
 });
 
-test('a chord comes back as text plus a PNG image', async () => {
+test('inline PNG bytes are opt-in, and come first when asked for', async () => {
   await withClient(async (client) => {
     const result = await client.callTool({
       name: 'get_chord_chart_by_name',
-      arguments: { name: 'Am', context: CONTEXT },
+      arguments: { name: 'Am', context: CONTEXT, format: 'both' },
     });
 
     const kinds = result.content.map((c) => c.type);
-    assert.deepEqual(kinds, ['image', 'text'], 'image first so the diagram leads in a chat');
+    assert.deepEqual(kinds, ['image', 'text'], 'image first when explicitly requested');
 
     const image = result.content[0];
     assert.equal(image.mimeType, 'image/png');
@@ -214,13 +214,13 @@ test('the image renders the same voicing the text chart describes', async () => 
     // D is x x 0 2 3 2 — asymmetric, so a mirrored or wrong render would show.
     const result = await client.callTool({
       name: 'get_chord_chart_by_name',
-      arguments: { name: 'D', context: CONTEXT },
+      arguments: { name: 'D', context: CONTEXT, format: 'both' },
     });
     const bytes = Buffer.from(result.content[0].data, 'base64');
     // Two renders of the same chord must be byte-identical (deterministic, cached).
     const again = await client.callTool({
       name: 'get_chord_chart_by_name',
-      arguments: { name: 'D', context: CONTEXT },
+      arguments: { name: 'D', context: CONTEXT, format: 'both' },
     });
     assert.deepEqual(bytes, Buffer.from(again.content[0].data, 'base64'));
   });
@@ -246,10 +246,34 @@ test('format:"text" drops the image, format:"image" keeps attribution', async ()
     assert.ok(trailing.includes('Guitar Practice Routine App (GPRA)'), 'attribution kept');
     assert.ok(trailing.includes('TormodKv'), 'upstream credit kept');
 
-    const both = await client.callTool({
+    const byDefault = await client.callTool({
       name: 'get_chord_chart_by_name',
       arguments: { name: 'Am', context: CONTEXT },
     });
-    assert.deepEqual(both.content.map((c) => c.type), ['image', 'text'], 'default is both');
+    assert.deepEqual(
+      byDefault.content.map((c) => c.type),
+      ['text'],
+      'default sends no image bytes — the URL carries the picture',
+    );
+  });
+});
+
+test('the chart image URL leads the text, before the ASCII grid', async () => {
+  await withClient(async (client) => {
+    const text = textOf(
+      await client.callTool({
+        name: 'get_chord_chart_by_name',
+        arguments: { name: 'Am', context: CONTEXT },
+      }),
+    );
+    const lines = text.split('\n');
+    const urlLine = lines.findIndex((l) => l.startsWith('Chart image: https://'));
+    const gridLine = lines.findIndex((l) => l.includes('E  A  D  G  B  E'));
+
+    assert.ok(urlLine > 0, 'chart image URL present');
+    assert.ok(urlLine < gridLine, 'the image URL comes before the ASCII grid');
+    assert.match(lines[urlLine], /\/chart\/\d+\.png$/, 'a direct PNG URL, not a page');
+    // The chord name still comes first, so the block is self-identifying.
+    assert.equal(lines[0], 'Am');
   });
 });

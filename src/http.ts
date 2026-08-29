@@ -2,7 +2,8 @@ import express from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { analyticsEnabled, shutdownAnalytics } from './analytics.js';
 import { createServer, SERVER_NAME, SERVER_VERSION } from './server.js';
-import { loadChords } from './data.js';
+import { getChordById, loadChords } from './data.js';
+import { chordPng } from './png.js';
 
 /**
  * Stateless streamable-HTTP endpoint: a fresh server + transport per request,
@@ -27,6 +28,40 @@ app.get('/health', (_req, res) => {
     chords: loadChords().length,
     analytics: analyticsEnabled(),
   });
+});
+
+/**
+ * A chord chart as a plain image, fetchable by anything.
+ *
+ * Images embedded in a tool result only reach people if the client chooses to
+ * surface them; a URL reaches every other surface the answer travels to —
+ * artifacts, HTML, markdown, a saved file. Charts are deterministic per id, so
+ * the response is immutable and cacheable forever.
+ */
+app.get('/chart/:file', async (req, res) => {
+  const match = /^(\d+)\.png$/.exec(req.params.file);
+  if (!match) {
+    res.status(404).json({ error: 'Expected /chart/<id>.png' });
+    return;
+  }
+
+  const chord = getChordById(Number(match[1]));
+  if (!chord) {
+    res.status(404).json({ error: 'Chord not found' });
+    return;
+  }
+
+  const png = await chordPng(chord);
+  if (!png) {
+    res.status(500).json({ error: 'Failed to render chord chart' });
+    return;
+  }
+
+  res
+    .type('image/png')
+    .set('Cache-Control', 'public, max-age=31536000, immutable')
+    .set('Content-Disposition', `inline; filename="${chord.name.replace(/[^\w#-]/g, '_')}.png"`)
+    .send(png);
 });
 
 app.post('/mcp', async (req, res) => {

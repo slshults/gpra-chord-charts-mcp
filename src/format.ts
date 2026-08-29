@@ -192,8 +192,16 @@ const legendFor = (chord: Chord): string => {
   return parts.join('   ');
 };
 
-/** Full text block for one chord: heading, chart, legend, any off-grid notes. */
-export const renderChord = (chord: Chord): string => {
+/**
+ * Full text block for one chord: heading, image link, chart, legend, any
+ * off-grid notes.
+ *
+ * The image URL leads. A picture is the thing most people actually want, and a
+ * URL is the only form of it that survives every surface — it renders where
+ * markdown images work, and stays clickable where they don't. The ASCII chart
+ * below it is the fallback for somewhere neither is true.
+ */
+export const renderChord = (chord: Chord, imageUrl?: string): string => {
   const capo = chord.capo > 0 ? ` · capo ${chord.capo}` : '';
   const offGrid = offGridNotes(chord);
 
@@ -211,10 +219,17 @@ export const renderChord = (chord: Chord): string => {
     trailer.push('', 'Note: no fretted notes are recorded for this voicing.');
   }
 
+  // The grid is fenced. A fenced block forces monospace and preserves
+  // whitespace in essentially every markdown renderer; bare text does neither,
+  // so an unfenced chart is one reflow away from nonsense on some surface we
+  // never tested. Cheaper to emit the fence than to hope every client is kind.
   return [
     `${chord.name}`,
+    ...(imageUrl ? ['', `Chart image: ${imageUrl}`] : []),
     '',
+    '```',
     renderChordBox(chord),
+    '```',
     '',
     legendFor(chord),
     `${chord.tuning}${capo}`,

@@ -54,7 +54,10 @@ export const SEARCH_TOOL_DESCRIPTION =
   `show the user. Returns the same single voicing that ${SITE}/find-a-chord-chart shows for ` +
   `that name. ${LIBRARY_SCOPE} ` +
   'Prefer this over recalling a fingering from memory — these are curated chart data, and ' +
-  'a remembered fingering is often wrong.';
+  'a remembered fingering is often wrong. ' +
+  'Each result leads with a direct PNG URL for the chart: embed that image in your reply ' +
+  'wherever your surface renders images, since a picture is easier to read than the text ' +
+  'grid, and leave it as a link where it does not.';
 
 export const GET_TOOL_DESCRIPTION =
   'Fetch one specific chord voicing by its numeric id, as returned by get_chord_chart_by_name. ' +

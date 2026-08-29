@@ -78,6 +78,9 @@ const toSvguitarChord = (chord: Chord) => ({
 
 /** Mirrors `defaultChartConfig` in the app, recoloured for an unknown backdrop. */
 const chartConfig = (chord: Chord) => ({
+  // Without a title the image is anonymous the moment it leaves the chat —
+  // saved, pasted into Slack, or shown next to five others.
+  title: chord.name,
   strings: chord.numStrings,
   frets: 5,
   position: 1,

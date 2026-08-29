@@ -14,7 +14,7 @@ import {
 import { getChordById, lookupChord } from './data.js';
 import { chordPng } from './png.js';
 import { renderChord } from './format.js';
-import { chordUrl, searchUrl } from './links.js';
+import { chartImageUrl, chordUrl, searchUrl } from './links.js';
 import type { Chord } from './types.js';
 
 export const SERVER_NAME = 'gpra-chord-charts';
@@ -38,15 +38,20 @@ const formatParam = z
   .enum(['both', 'image', 'text'])
   .optional()
   .describe(
-    'Which representations to return. Defaults to "both". Use "text" when the ' +
-      'user does not want images or the client cannot display them, and "image" ' +
-      'when only the diagram is wanted.',
+    'Which representations to return. Defaults to "text", which includes a direct ' +
+      'URL to a PNG of the chart — embed that where your surface renders images. ' +
+      'Use "image" or "both" only if you need the PNG bytes inline; they cost ' +
+      'image tokens and many clients bury them.',
   );
 
 type ResponseFormat = 'both' | 'image' | 'text';
 
 const chordBlock = (chord: Chord): string =>
-  [renderChord(chord), '', `View or edit this chart: ${chordUrl(chord)}`].join('\n');
+  [
+    renderChord(chord, chartImageUrl(chord)),
+    '',
+    `View or edit this chart: ${chordUrl(chord)}`,
+  ].join('\n');
 
 /** Every response ends with the footer, misses included. Routing all returns
  *  through here means a new path can't forget it.
@@ -56,7 +61,7 @@ const chordBlock = (chord: Chord): string =>
  *  nothing — MCP has no capability for negotiating this (ClientCapabilities
  *  covers roots, sampling, elicitation and tasks, not content rendering), so
  *  ordering is the only lever available. */
-const withFooter = (body: string, image?: Buffer | null, format: ResponseFormat = 'both') => {
+const withFooter = (body: string, image?: Buffer | null, format: ResponseFormat = 'text') => {
   const showImage = Boolean(image) && format !== 'text';
   // The chart text is droppable; the attribution is not. An image-only response
   // still carries the footer, so credit travels with the chart either way.
@@ -73,7 +78,7 @@ const withFooter = (body: string, image?: Buffer | null, format: ResponseFormat 
 };
 
 /** One chord, rendered both ways. An image failure degrades to text alone. */
-const chordResult = async (chord: Chord, format: ResponseFormat = 'both') =>
+const chordResult = async (chord: Chord, format: ResponseFormat = 'text') =>
   withFooter(
     chordBlock(chord),
     format === 'text' ? null : await chordPng(chord),

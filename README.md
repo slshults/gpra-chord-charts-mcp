@@ -43,17 +43,17 @@ the charts on the site.
 | `get_chord_chart_by_id` | The same chart by its numeric id, for re-rendering something already returned. |
 | `get_chord_of_the_day` | Today's Chord of the Day — the same chord GPRA posts to Bluesky and Facebook. |
 
-Each chord comes back **twice: as a PNG image and then a text chart**, in that
-order, so the diagram leads and the text sits underneath it. Clients that can't
-render images still get a complete answer from the text block. MCP has no way to
-negotiate image support — `ClientCapabilities` covers roots, sampling,
-elicitation and tasks, not content rendering — so sending both is the only
-reliable approach. Images are ~15-20 KB, rendered on demand with SVGuitar and
-cached.
+Each result **leads with a direct PNG URL** for the chart, then the same chart as
+a fenced text grid. The URL is the picture in the form that survives every
+surface: it renders where markdown images work, stays clickable where they
+don't, and can be dropped into an artifact, an HTML page, or a saved file. The
+text grid is the fallback for anywhere neither is true.
 
-Pass `format: "text"` to drop the image (useful when the user doesn't want
-pictures, and it saves the caller an image's worth of context per call), or
-`format: "image"` to drop the chart text. Attribution is kept either way.
+Inline PNG bytes are **opt-in** via `format: "image"` or `format: "both"`. They
+cost image tokens and several clients bury them in a collapsed tool drawer, so
+they're not worth sending by default now that a URL does the job. `format`
+defaults to `"text"`, which still includes the image URL. Attribution is kept in
+every mode.
 
 Every tool also takes a `context` argument describing why it's being called.
 That's injected by PostHog's MCP SDK and populates agent intent in analytics;
