@@ -178,3 +178,78 @@ test('an over-long query never reaches the response', async () => {
     assert.ok(!outcome.includes('A'.repeat(200)), 'bulk text must not be echoed back');
   });
 });
+
+test('a chord comes back as text plus a PNG image', async () => {
+  await withClient(async (client) => {
+    const result = await client.callTool({
+      name: 'get_chord_chart_by_name',
+      arguments: { name: 'Am', context: CONTEXT },
+    });
+
+    const kinds = result.content.map((c) => c.type);
+    assert.deepEqual(kinds, ['image', 'text'], 'image first so the diagram leads in a chat');
+
+    const image = result.content[0];
+    assert.equal(image.mimeType, 'image/png');
+    const bytes = Buffer.from(image.data, 'base64');
+    // PNG magic number: 89 50 4E 47 0D 0A 1A 0A
+    assert.deepEqual([...bytes.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    assert.ok(bytes.length > 2000, `image looks empty at ${bytes.length} bytes`);
+    assert.ok(bytes.length < 1_000_000, 'must stay well under the MCP result size ceiling');
+  });
+});
+
+test('a miss returns text only, with no image block', async () => {
+  await withClient(async (client) => {
+    const result = await client.callTool({
+      name: 'get_chord_chart_by_name',
+      arguments: { name: 'Qbanjo9', context: CONTEXT },
+    });
+    assert.deepEqual(result.content.map((c) => c.type), ['text']);
+  });
+});
+
+test('the image renders the same voicing the text chart describes', async () => {
+  await withClient(async (client) => {
+    // D is x x 0 2 3 2 — asymmetric, so a mirrored or wrong render would show.
+    const result = await client.callTool({
+      name: 'get_chord_chart_by_name',
+      arguments: { name: 'D', context: CONTEXT },
+    });
+    const bytes = Buffer.from(result.content[0].data, 'base64');
+    // Two renders of the same chord must be byte-identical (deterministic, cached).
+    const again = await client.callTool({
+      name: 'get_chord_chart_by_name',
+      arguments: { name: 'D', context: CONTEXT },
+    });
+    assert.deepEqual(bytes, Buffer.from(again.content[0].data, 'base64'));
+  });
+});
+
+test('format:"text" drops the image, format:"image" keeps attribution', async () => {
+  await withClient(async (client) => {
+    const textOnly = await client.callTool({
+      name: 'get_chord_chart_by_name',
+      arguments: { name: 'Am', context: CONTEXT, format: 'text' },
+    });
+    assert.deepEqual(textOnly.content.map((c) => c.type), ['text']);
+    assert.ok(textOf(textOnly).includes('E  A  D  G  B  E'), 'still a full chart');
+
+    const imageOnly = await client.callTool({
+      name: 'get_chord_chart_by_name',
+      arguments: { name: 'Am', context: CONTEXT, format: 'image' },
+    });
+    assert.deepEqual(imageOnly.content.map((c) => c.type), ['image', 'text']);
+    const trailing = textOf(imageOnly);
+    // Chart text is dropped, but credit is not negotiable.
+    assert.ok(!trailing.includes('E  A  D  G  B  E'), 'chart text dropped');
+    assert.ok(trailing.includes('Guitar Practice Routine App (GPRA)'), 'attribution kept');
+    assert.ok(trailing.includes('TormodKv'), 'upstream credit kept');
+
+    const both = await client.callTool({
+      name: 'get_chord_chart_by_name',
+      arguments: { name: 'Am', context: CONTEXT },
+    });
+    assert.deepEqual(both.content.map((c) => c.type), ['image', 'text'], 'default is both');
+  });
+});

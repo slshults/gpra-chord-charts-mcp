@@ -43,8 +43,21 @@ the charts on the site.
 | `get_chord_chart_by_id` | The same chart by its numeric id, for re-rendering something already returned. |
 | `get_chord_of_the_day` | Today's Chord of the Day — the same chord GPRA posts to Bluesky and Facebook. |
 
-Every tool takes a `context` argument describing why it's being called. That's
-what populates agent intent in analytics; nothing in the response depends on it.
+Each chord comes back **twice: as a PNG image and then a text chart**, in that
+order, so the diagram leads and the text sits underneath it. Clients that can't
+render images still get a complete answer from the text block. MCP has no way to
+negotiate image support — `ClientCapabilities` covers roots, sampling,
+elicitation and tasks, not content rendering — so sending both is the only
+reliable approach. Images are ~15-20 KB, rendered on demand with SVGuitar and
+cached.
+
+Pass `format: "text"` to drop the image (useful when the user doesn't want
+pictures, and it saves the caller an image's worth of context per call), or
+`format: "image"` to drop the chart text. Attribution is kept either way.
+
+Every tool also takes a `context` argument describing why it's being called.
+That's injected by PostHog's MCP SDK and populates agent intent in analytics;
+nothing in the response depends on it.
 
 ## What's in the library
 
@@ -53,9 +66,14 @@ server does no fuzzy matching and no query cleanup — it passes the name throug
 the same way the website does, so the tool description asks the calling
 assistant to send a plain chord name ("G", not "how do I play G major").
 
-Charts are drawn on a five-fret grid starting at the nut, matching the site.
-Where a voicing has notes above the fifth fret, they're named in words beneath
-the chart rather than dropped.
+Charts are drawn on a five-fret grid starting at the nut, matching the site —
+which means a voicing with notes above the fifth fret has them fall outside the
+grid. The **image** drops them, exactly as the website does; the **text** names
+them underneath ("Also fretted, past this five-fret grid: string 5 (A) fret 6").
+So the pair is honest even where the picture alone isn't.
+
+Images use black ink on white rather than the site's white-on-transparent: the
+site can assume its own dark UI, and a chat client's background is unknown.
 
 ## Connecting a client
 
@@ -134,9 +152,10 @@ as unplayable) rather than quietly normalizing them away.
 
 The hosted server records anonymous usage analytics through
 [`@posthog/mcp`](https://www.npmjs.com/package/@posthog/mcp): which tool was
-called, how long it took, whether it errored, the calling client's name and
-version, and the `context` string the agent supplied. No personal identifier is
-stored and no person profile is created.
+called, how long it took, whether it errored, the calling client's identity
+(name and version on connect, user-agent on each call), and the `context` string
+the agent supplied describing why it called. No personal identifier is stored and
+no person profile is created.
 
 Analytics are off entirely unless `POSTHOG_API_KEY` is set, so running this
 yourself — including over stdio — sends nothing anywhere.

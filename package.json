@@ -27,7 +27,10 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@posthog/mcp": "^0.11.6",
+    "@resvg/resvg-js": "^2.6.2",
     "express": "^5.1.0",
+    "svgdom": "^0.1.28",
+    "svguitar": "^2.5.5",
     "zod": "^4.1.12"
   },
   "devDependencies": {
