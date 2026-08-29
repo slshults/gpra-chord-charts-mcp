@@ -5,7 +5,6 @@ import { chordOfTheDay } from './chord-of-the-day.js';
 import {
   CHORD_OF_THE_DAY_DESCRIPTION,
   CHORD_OF_THE_DAY_UNAVAILABLE,
-  CONTEXT_PARAM_DESCRIPTION,
   FOOTER,
   GET_TOOL_DESCRIPTION,
   LIBRARY_SCOPE,
@@ -24,10 +23,6 @@ export const SERVER_VERSION = '0.1.0';
  *  a little room; short enough that the query can't be used to push bulk text
  *  into a tool result. */
 const MAX_QUERY_CHARS = 64;
-
-/** Present on every tool. The value is read by PostHog's MCP SDK and recorded
- *  as `$mcp_intent`; nothing in the response depends on it. */
-const contextParam = z.string().max(500).describe(CONTEXT_PARAM_DESCRIPTION);
 
 const chordBlock = (chord: Chord): string =>
   [renderChord(chord), '', `View or edit this chart: ${chordUrl(chord)}`].join('\n');
@@ -52,7 +47,6 @@ export const createServer = (): McpServer => {
           .min(1)
           .max(MAX_QUERY_CHARS)
           .describe('A single chord name as written on a chart, e.g. "Am7" or "D/F#".'),
-        context: contextParam,
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -83,7 +77,6 @@ export const createServer = (): McpServer => {
       description: GET_TOOL_DESCRIPTION,
       inputSchema: {
         id: z.number().int().positive().describe('Numeric chord id.'),
-        context: contextParam,
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -103,7 +96,7 @@ export const createServer = (): McpServer => {
     {
       title: 'Chord of the day',
       description: CHORD_OF_THE_DAY_DESCRIPTION,
-      inputSchema: { context: contextParam },
+      inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async () => {

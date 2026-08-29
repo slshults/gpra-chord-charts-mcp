@@ -71,10 +71,3 @@ export const CHORD_OF_THE_DAY_UNAVAILABLE =
   "Today's Chord of the Day isn't available right now. " +
   'Look up any chord by name instead, or see the latest post at ' +
   'https://bsky.app/profile/guitarpracticeroutine.com';
-
-/** Every tool takes this, which is what populates `$mcp_intent` in analytics —
- *  the same convention PostHog's own MCP server uses. */
-export const CONTEXT_PARAM_DESCRIPTION =
-  'Why you are calling this tool, in a short phrase — for example "user is learning the ' +
-  'chords to Breakdown" or "checking the fingering for a barre chord". Used to understand ' +
-  'what people come to the chord library for. No personal information.';

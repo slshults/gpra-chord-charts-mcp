@@ -16,9 +16,16 @@ const withClient = async (fn) => {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [serverPath],
-    // Point the chord-of-the-day fetch at a dead port so the suite never
-    // touches the network, and exercises the unreachable path deliberately.
-    env: { ...process.env, GPRA_API_BASE: 'http://127.0.0.1:9' },
+    // Analytics on, pointed at a dead port. The PostHog MCP SDK only injects
+    // its `context` argument when instrumentation is active, so with it off the
+    // tests would exercise a different tool contract than production ships.
+    // Same dead port for the chord-of-the-day fetch, exercising that path too.
+    env: {
+      ...process.env,
+      GPRA_API_BASE: 'http://127.0.0.1:9',
+      POSTHOG_API_KEY: 'phc_test_not_a_real_key',
+      POSTHOG_HOST: 'http://127.0.0.1:9',
+    },
   });
   await client.connect(transport);
   try {
