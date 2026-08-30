@@ -208,6 +208,20 @@ The chord library exists because of other people's work:
   [guitarpracticeroutine.com](https://guitarpracticeroutine.com). (This server
   renders text, not SVG.)
 
+## A note on `npm audit`
+
+`npm audit` reports three high-severity advisories against `image-size`, pulled
+in transitively by `svguitar` → `svgdom`. They are denial-of-service infinite
+loops in the ICNS, JXL and HEIF **file** parsers, reached only through
+`svgdom`'s `HTMLImageElement`, which calls `imageSizeFromFile` when an `<img>`
+is given a source.
+
+Nothing here constructs one. Chart rendering draws vector primitives from a
+chord name and an integer id; the only inputs that cross the boundary are a
+string of at most 64 characters and a positive integer, and no code path
+accepts, fetches or decodes an image file. There is no upstream fix, so the
+advisories will keep showing until `svgdom` moves off `image-size`.
+
 ## License
 
 - **Code:** MIT — see `LICENSE`.
