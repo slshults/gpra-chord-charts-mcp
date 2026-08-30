@@ -230,3 +230,7 @@ advisories will keep showing until `svgdom` moves off `image-size`.
   carries no stated licence, so no licence is asserted over them here. The
   fingerings themselves are factual descriptions of where fingers go on a
   fretboard. Please credit the projects above if you reuse the data.
+
+---
+
+[![gpra-chord-charts-mcp MCP server](https://glama.ai/mcp/servers/slshults/gpra-chord-charts-mcp/badges/score.svg)](https://glama.ai/mcp/servers/slshults/gpra-chord-charts-mcp)
