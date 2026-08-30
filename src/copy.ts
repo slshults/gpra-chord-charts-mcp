@@ -42,7 +42,7 @@ export const MISS_SUGGESTION =
  * a regex on this end.
  */
 export const LIBRARY_SCOPE =
-  'The library holds 12,708 standard-tuning (EADGBE) voicings, exactly one per chord name. ' +
+  'The library holds 12,708 standard-tuning (EADGBE) chord names, exactly one voicing each. ' +
   'Pass a plain chord name as it would be written on a chart — "G", "Am7", "Cmaj7", "D/F#", ' +
   '"F#m7b5" — not a sentence. Convert spoken forms yourself first: "G major" is "G", ' +
   '"A minor" is "Am", and use "#" and "b" rather than the unicode sharp and flat signs. ' +
