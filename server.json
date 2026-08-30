@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.slshults/gpra-chord-charts",
   "title": "Guitar Practice Routine App — Chord Charts",
-  "description": "Look up guitar chord charts by name and render them as text chord diagrams, from the Guitar Practice Routine App library of 12,708 standard-tuning voicings",
+  "description": "Look up guitar chord charts by name and render them as text chord diagrams, from the Guitar Practice Routine App library of 12,708 standard-tuning chord names",
   "repository": {
     "url": "https://github.com/slshults/gpra-chord-charts-mcp",
     "source": "github"
