@@ -6,3 +6,6 @@ dist/
 # Intermediate dump from scripts/dump-chords.sql. The normalized snapshot
 # (data/common-chords.json) is the artifact that ships.
 data/common-chords.raw.json
+
+# npm pack output
+*.tgz
