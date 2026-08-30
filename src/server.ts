@@ -15,6 +15,7 @@ import { getChordById, lookupChord } from './data.js';
 import { chordPng } from './png.js';
 import { renderChord } from './format.js';
 import { chartImageUrl, chordUrl, searchUrl } from './links.js';
+import { registerChordWidget, widgetUriFor } from './widget.js';
 import type { Chord } from './types.js';
 
 export const SERVER_NAME = 'gpra-chord-charts';
@@ -77,13 +78,28 @@ const withFooter = (body: string, image?: Buffer | null, format: ResponseFormat 
   };
 };
 
-/** One chord, rendered both ways. An image failure degrades to text alone. */
-const chordResult = async (chord: Chord, format: ResponseFormat = 'text') =>
-  withFooter(
-    chordBlock(chord),
-    format === 'text' ? null : await chordPng(chord),
-    format,
-  );
+/**
+ * One chord, delivered every way a host might accept.
+ *
+ * Layered on purpose: a widget URI for hosts that render MCP Apps, PNG bytes
+ * when asked for, and always the text chart with a chart URL in it. Hosts that
+ * ignore the first two still get a complete answer from the last.
+ */
+const chordResult = async (chord: Chord, format: ResponseFormat = 'text') => {
+  const uri = widgetUriFor(chord);
+  return {
+    ...withFooter(chordBlock(chord), format === 'text' ? null : await chordPng(chord), format),
+    structuredContent: {
+      name: chord.name,
+      id: chord.id,
+      imageUrl: chartImageUrl(chord),
+    },
+    // `ui.resourceUri` is the current key; `ui/resourceUri` the legacy one.
+    // Emitting both is what the reference implementations do, since hosts
+    // adopted them at different times.
+    _meta: { ui: { resourceUri: uri }, 'ui/resourceUri': uri },
+  };
+};
 
 export const createServer = (): McpServer => {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
@@ -164,6 +180,7 @@ export const createServer = (): McpServer => {
     },
   );
 
+  registerChordWidget(server);
   instrumentServer(server);
   return server;
 };

@@ -277,3 +277,53 @@ test('the chart image URL leads the text, before the ASCII grid', async () => {
     assert.equal(lines[0], 'Am');
   });
 });
+
+/**
+ * The MCP Apps widget.
+ *
+ * Whether a host actually mounts the iframe is out of our hands — claude.ai
+ * currently doesn't — so what's worth testing is the part we control: that a
+ * chord result points at a widget, and that the widget resolves to real HTML
+ * carrying that chord's image. If those hold, a host that renders MCP Apps has
+ * everything it needs, and one that doesn't is unaffected.
+ */
+test('chord results carry a widget URI, and it resolves to that chord', async () => {
+  await withClient(async (client) => {
+    const result = await client.callTool({
+      name: 'get_chord_chart_by_name',
+      arguments: { name: 'Am', context: CONTEXT },
+    });
+
+    const uri = result._meta?.ui?.resourceUri;
+    assert.ok(uri?.startsWith('ui://gpra-chord-charts/chart/'), `no widget URI: ${uri}`);
+    assert.equal(result._meta['ui/resourceUri'], uri, 'both meta keys must agree');
+
+    // structuredContent is the machine-readable twin of the text block; a host
+    // that builds its own UI reads this rather than parsing prose.
+    assert.equal(typeof result.structuredContent.name, 'string');
+    assert.match(result.structuredContent.imageUrl, /\/chart\/\d+\.png$/);
+    assert.ok(
+      uri.endsWith(`/${result.structuredContent.id}`),
+      'the widget URI must address the chord that was returned',
+    );
+
+    const resource = await client.readResource({ uri });
+    const html = resource.contents[0];
+    assert.equal(html.mimeType, 'text/html;profile=mcp-app');
+    assert.match(html.text, /^<!DOCTYPE html>/);
+    assert.ok(
+      html.text.includes(result.structuredContent.imageUrl),
+      'the widget must show this chord’s chart, not some other one',
+    );
+    assert.ok(html.text.includes(result.structuredContent.name), 'widget must name the chord');
+  });
+});
+
+test('a widget URI for a chord that does not exist fails cleanly', async () => {
+  await withClient(async (client) => {
+    await assert.rejects(
+      () => client.readResource({ uri: 'ui://gpra-chord-charts/chart/99999999' }),
+      /No chord chart widget|not found/i,
+    );
+  });
+});
