@@ -84,16 +84,19 @@ const withFooter = (body: string, image?: Buffer | null, format: ResponseFormat 
  * Layered on purpose: a widget URI for hosts that render MCP Apps, PNG bytes
  * when asked for, and always the text chart with a chart URL in it. Hosts that
  * ignore the first two still get a complete answer from the last.
+ *
+ * Deliberately NO `structuredContent`. It was added here and removed the same
+ * day: a client that understands it may render it *instead of* the content
+ * blocks, and one measured doing exactly that — collapsing the whole answer to
+ * three JSON fields and taking the chart, the attribution and the call to
+ * action with it. Nothing needs it (the widget has its chord baked in
+ * server-side), so it was pure downside. The text block is the floor every
+ * other layer sits on; nothing goes in a result that can displace it.
  */
 const chordResult = async (chord: Chord, format: ResponseFormat = 'text') => {
   const uri = widgetUriFor(chord);
   return {
     ...withFooter(chordBlock(chord), format === 'text' ? null : await chordPng(chord), format),
-    structuredContent: {
-      name: chord.name,
-      id: chord.id,
-      imageUrl: chartImageUrl(chord),
-    },
     // `ui.resourceUri` is the current key; `ui/resourceUri` the legacy one.
     // Emitting both is what the reference implementations do, since hosts
     // adopted them at different times.

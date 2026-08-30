@@ -298,24 +298,44 @@ test('chord results carry a widget URI, and it resolves to that chord', async ()
     assert.ok(uri?.startsWith('ui://gpra-chord-charts/chart/'), `no widget URI: ${uri}`);
     assert.equal(result._meta['ui/resourceUri'], uri, 'both meta keys must agree');
 
-    // structuredContent is the machine-readable twin of the text block; a host
-    // that builds its own UI reads this rather than parsing prose.
-    assert.equal(typeof result.structuredContent.name, 'string');
-    assert.match(result.structuredContent.imageUrl, /\/chart\/\d+\.png$/);
-    assert.ok(
-      uri.endsWith(`/${result.structuredContent.id}`),
-      'the widget URI must address the chord that was returned',
-    );
-
+    const id = uri.slice(uri.lastIndexOf('/') + 1);
     const resource = await client.readResource({ uri });
     const html = resource.contents[0];
     assert.equal(html.mimeType, 'text/html;profile=mcp-app');
     assert.match(html.text, /^<!DOCTYPE html>/);
     assert.ok(
-      html.text.includes(result.structuredContent.imageUrl),
+      html.text.includes(`/chart/${id}.png`),
       'the widget must show this chord’s chart, not some other one',
     );
-    assert.ok(html.text.includes(result.structuredContent.name), 'widget must name the chord');
+    assert.ok(html.text.includes('>Am</h1>'), 'widget must name the chord');
+    // The widget is one layer, not a replacement. If a result ever stops
+    // carrying the text chart, every host that doesn't render widgets loses
+    // the answer entirely.
+    assert.match(textOf(result), /Chart image: https:/);
+  });
+});
+
+/**
+ * No `structuredContent` on tool results.
+ *
+ * This is a regression test for a real one. Adding it looked free — a
+ * machine-readable twin of the text — but a client that understands
+ * structuredContent may render it *instead of* the content blocks, and one
+ * measured doing exactly that: the whole answer collapsed to three JSON
+ * fields, taking the chart, the attribution and the call to action with it.
+ * The attribution is a commitment we make to the chord data's authors, so
+ * anything that can displace the text block stays out of the result.
+ */
+test('results never carry structuredContent, which can displace the text', async () => {
+  await withClient(async (client) => {
+    for (const name of ['get_chord_chart_by_name', 'get_chord_of_the_day']) {
+      const result = await client.callTool({
+        name,
+        arguments: name === 'get_chord_chart_by_name' ? { name: 'G', context: CONTEXT } : { context: CONTEXT },
+      });
+      assert.equal(result.structuredContent, undefined, `${name} must not set structuredContent`);
+      assert.ok(textOf(result).includes('guitarpracticeroutine.com'), `${name} must keep its attribution`);
+    }
   });
 });
 
