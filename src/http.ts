@@ -11,8 +11,9 @@ import { chordPng } from './png.js';
  * snapshot, so there is nothing to keep between calls, and statelessness means
  * the process can be restarted or scaled without dropping anyone's session.
  *
- * No CORS headers are set. Claude and the connector directory fetch server-side,
- * so they don't need them; a browser-based MCP client would.
+ * The MCP endpoint sets no CORS headers: Claude and the connector directory
+ * fetch server-side, so they don't need them; a browser-based MCP client would.
+ * The chart image route below is the exception, and says why there.
  */
 const app = express();
 app.disable('x-powered-by');

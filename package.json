@@ -53,7 +53,6 @@
     "@posthog/mcp": "^0.11.6",
     "@resvg/resvg-js": "^2.6.2",
     "express": "^5.1.0",
-    "gpra-chord-charts-mcp": "file:gpra-chord-charts-mcp-0.1.0.tgz",
     "svgdom": "^0.1.28",
     "svguitar": "^2.5.5",
     "zod": "^4.1.12"
