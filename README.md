@@ -59,6 +59,34 @@ Every tool also takes a `context` argument describing why it's being called.
 That's injected by PostHog's MCP SDK and populates agent intent in analytics;
 nothing in the response depends on it.
 
+### How a chart reaches a person
+
+There is no capability negotiation for "can you show an image", so the result
+carries several layers and lets the host use whichever it understands:
+
+| Layer | Where it lands |
+| --- | --- |
+| Text grid + `Chart image:` URL | Everywhere. This is the floor. |
+| MCP Apps widget (`_meta.ui.resourceUri`) | Hosts that render MCP Apps — Claude Code, Cowork, ChatGPT, PostHog Desktop. |
+| Inline PNG bytes (`format: "image"`) | Hosts that surface image content blocks, on request. |
+
+The widget is a `ui://gpra-chord-charts/chart/{id}` resource resolving to a
+self-contained HTML page with the chord already baked in — no JavaScript, no
+postMessage bridge, no client bundle. A host that ignores it simply shows no
+widget, and the text answer is untouched.
+
+Measured on claude.ai, for anyone tempted to try these again: bare markdown
+images render as a click-through placeholder that opens a browser tab rather
+than loading inline; images wrapped in links collapse to the link; raw HTML is
+escaped to literal text; and the MCP Apps iframe is fetched but never mounted
+([ext-apps#671](https://github.com/modelcontextprotocol/ext-apps/issues/671)).
+On that surface the URL is the whole story, which is why it leads the text.
+
+Results deliberately carry **no `structuredContent`**. A client that understands
+it may render it *instead of* the content blocks — one measurably did, reducing
+the answer to three JSON fields and dropping the chart, the attribution and the
+call to action. Nothing goes in a result that can displace the text.
+
 ## What's in the library
 
 12,708 standard-tuning (EADGBE) voicings, **exactly one per chord name**. This

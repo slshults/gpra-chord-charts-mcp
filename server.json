@@ -13,5 +13,16 @@
       "type": "streamable-http",
       "url": "https://mcp.guitarpracticeroutine.com/mcp"
     }
-  ]
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "gpra-chord-charts-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
+  "websiteUrl": "https://guitarpracticeroutine.com/find-a-chord-chart"
 }

@@ -1,18 +1,41 @@
 {
   "name": "gpra-chord-charts-mcp",
   "version": "0.1.0",
+  "mcpName": "io.github.slshults/gpra-chord-charts",
   "description": "MCP server exposing guitar chord charts from Guitar Practice Routine App (GPRA)",
   "type": "module",
   "license": "MIT",
+  "author": "Steven Shults",
+  "homepage": "https://guitarpracticeroutine.com/find-a-chord-chart",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slshults/gpra-chord-charts-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/slshults/gpra-chord-charts-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "mcp-server",
+    "guitar",
+    "chords",
+    "chord-charts",
+    "chord-diagrams",
+    "music",
+    "tablature"
+  ],
   "engines": {
     "node": ">=20"
   },
   "bin": {
-    "gpra-chord-charts-mcp": "./dist/stdio.js"
+    "gpra-chord-charts-mcp": "dist/stdio.js"
   },
   "files": [
     "dist",
-    "data/common-chords.json"
+    "data/common-chords.json",
+    "LICENSE",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc",
@@ -30,6 +53,7 @@
     "@posthog/mcp": "^0.11.6",
     "@resvg/resvg-js": "^2.6.2",
     "express": "^5.1.0",
+    "gpra-chord-charts-mcp": "file:gpra-chord-charts-mcp-0.1.0.tgz",
     "svgdom": "^0.1.28",
     "svguitar": "^2.5.5",
     "zod": "^4.1.12"
@@ -39,5 +63,9 @@
     "@types/node": "^22.15.3",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
+  },
+  "main": "index.js",
+  "directories": {
+    "test": "test"
   }
 }
