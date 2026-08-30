@@ -225,6 +225,7 @@ advisories will keep showing until `svgdom` moves off `image-size`.
 ## License
 
 - **Code:** MIT — see `LICENSE`.
+- **Provenance of the chord data:** see `NOTICE`.
 - **Chord data:** the voicings originate from SVGuitar-ChordCollection, which
   carries no stated licence, so no licence is asserted over them here. The
   fingerings themselves are factual descriptions of where fingers go on a

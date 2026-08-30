@@ -35,6 +35,7 @@
     "dist",
     "data/common-chords.json",
     "LICENSE",
+    "NOTICE",
     "README.md"
   ],
   "scripts": {

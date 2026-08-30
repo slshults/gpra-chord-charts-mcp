@@ -1,0 +1,24 @@
+NOTICE
+======
+
+This file records the provenance of material in this repository that the MIT
+licence in LICENSE does not cover. It lives here rather than appended to
+LICENSE because automated licence detection (GitHub's licensee, and the
+downstream directories that read it) requires LICENSE to match the canonical
+MIT text exactly — prose added to it makes the licence read as "Other".
+
+Code
+----
+MIT, per LICENSE.
+
+Chord data (`data/`)
+--------------------
+The voicings originate from SVGuitar-ChordCollection by TormodKv
+(https://github.com/TormodKv/SVGuitar-ChordCollection), itself based on
+chord-collection by T-vK (https://github.com/T-vK/chord-collection). Neither
+states a licence.
+
+No licence is asserted over that data here, by us or on their behalf — a
+fingering is a factual description of where fingers go on a fretboard, and it
+isn't ours to relicense in any case. If you reuse the data, please credit those
+projects.
