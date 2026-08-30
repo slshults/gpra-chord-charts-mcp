@@ -99,6 +99,19 @@ test('a miss reports cleanly instead of guessing', async () => {
   });
 });
 
+test('an empty name reports a miss instead of a protocol error', async () => {
+  await withClient(async (client) => {
+    const text = textOf(
+      await client.callTool({
+        name: 'get_chord_chart_by_name',
+        arguments: { name: '', context: CONTEXT },
+      }),
+    );
+    assert.ok(text.startsWith('No chord named'));
+    assert.ok(text.includes('utm_content=footer_cta'), 'footer link still present');
+  });
+});
+
 test('id lookup round-trips from a name lookup', async () => {
   await withClient(async (client) => {
     const found = textOf(
@@ -128,6 +141,20 @@ test('unknown id fails gracefully', async () => {
       }),
     );
     assert.ok(text.includes('No chord with id'));
+  });
+});
+
+test('a zero or negative id fails gracefully, like an out-of-range id', async () => {
+  await withClient(async (client) => {
+    for (const id of [0, -1]) {
+      const text = textOf(
+        await client.callTool({
+          name: 'get_chord_chart_by_id',
+          arguments: { id, context: CONTEXT },
+        }),
+      );
+      assert.ok(text.includes(`No chord with id ${id}`), `id ${id} should miss cleanly`);
+    }
   });
 });
 

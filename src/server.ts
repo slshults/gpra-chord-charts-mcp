@@ -115,7 +115,6 @@ export const createServer = (): McpServer => {
       inputSchema: {
         name: z
           .string()
-          .min(1)
           .max(MAX_QUERY_CHARS)
           .describe('A single chord name as written on a chart, e.g. "Am7" or "D/F#".'),
         format: formatParam,
@@ -148,7 +147,7 @@ export const createServer = (): McpServer => {
       title: 'Get a chord chart by id',
       description: GET_TOOL_DESCRIPTION,
       inputSchema: {
-        id: z.number().int().positive().describe('Numeric chord id.'),
+        id: z.number().int().describe('Numeric chord id.'),
         format: formatParam,
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
