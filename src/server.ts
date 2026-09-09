@@ -116,12 +116,15 @@ export const createServer = (): McpServer => {
         name: z
           .string()
           .max(MAX_QUERY_CHARS)
+          .optional()
           .describe('A single chord name as written on a chart, e.g. "Am7" or "D/F#".'),
         format: formatParam,
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ name, format }) => {
+    // A missing name is a miss, not a protocol error: it reads as the empty
+    // query, which `lookupChord` already treats as no match.
+    async ({ name = '', format }) => {
       const chord = lookupChord(name);
 
       if (!chord) {
@@ -147,17 +150,18 @@ export const createServer = (): McpServer => {
       title: 'Get a chord chart by id',
       description: GET_TOOL_DESCRIPTION,
       inputSchema: {
-        id: z.number().int().describe('Numeric chord id.'),
+        id: z.number().int().optional().describe('Numeric chord id.'),
         format: formatParam,
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
+    // A missing id is a miss, not a protocol error. Guard the lookup so an
+    // absent id never reaches `getChordById`, which expects a number.
     async ({ id, format }) => {
-      const chord = getChordById(id);
+      const chord = id === undefined ? undefined : getChordById(id);
       if (!chord) {
-        return withFooter(
-          `No chord with id ${id}. Use get_chord_chart_by_name to look one up.`,
-        );
+        const missing = id === undefined ? 'No chord id given' : `No chord with id ${id}`;
+        return withFooter(`${missing}. Use get_chord_chart_by_name to look one up.`);
       }
       return chordResult(chord, format);
     },
