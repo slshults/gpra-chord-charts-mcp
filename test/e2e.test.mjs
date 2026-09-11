@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { isUnknownToolRejection } from '../dist/analytics.js';
 
 const serverPath = fileURLToPath(new URL('../dist/stdio.js', import.meta.url));
 const CONTEXT = 'automated test of the chord chart server';
@@ -371,6 +372,31 @@ test('a widget URI for a chord that does not exist fails cleanly', async () => {
     await assert.rejects(
       () => client.readResource({ uri: 'ui://gpra-chord-charts/chart/99999999' }),
       /No chord chart widget|not found/i,
+    );
+  });
+});
+
+// Contract test for the analytics filter that keeps unknown-tool probes out of
+// error tracking. The filter matches the SDK's exact `-32602` wording, so drive
+// the real SDK: if a future version rewords the message, this fails here rather
+// than the probe exceptions silently returning.
+test('the analytics filter drops the SDK real unknown-tool rejection', async () => {
+  await withClient(async (client) => {
+    const result = await client.callTool({
+      name: '__verifymcp_auth_probe_deadbeef__',
+      arguments: {},
+    });
+    assert.ok(result.isError, 'an unknown tool must answer with an error result');
+    // The message the SDK returns is the value `@posthog/mcp` builds the
+    // `$exception` from, so feed it through the filter exactly as it would.
+    const message = textOf(result);
+    assert.match(message, /-32602/, 'still the invalid-params rejection');
+    assert.ok(
+      isUnknownToolRejection({
+        event: '$exception',
+        properties: { $exception_list: [{ value: message }] },
+      }),
+      `filter must drop the SDK message: ${message}`,
     );
   });
 });

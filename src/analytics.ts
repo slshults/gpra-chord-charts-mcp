@@ -1,4 +1,9 @@
-import { instrument, PostHog } from '@posthog/mcp';
+import {
+  instrument,
+  PostHog,
+  PostHogMCPAnalyticsEvent,
+  type BeforeSendFn,
+} from '@posthog/mcp';
 
 /**
  * Usage tracking.
@@ -24,10 +29,40 @@ const HOST = process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com';
 
 const client = API_KEY ? new PostHog(API_KEY, { host: HOST }) : null;
 
+/**
+ * The MCP SDK answers a call for a tool the server does not have with this
+ * exact protocol error: `MCP error -32602: Tool <name> not found`. That answer
+ * is correct, not a fault of ours. `instrument()` still captures it as a
+ * `$exception`, and outside verifiers probe the public server with a fresh
+ * random tool name every day, so each miss opens its own error tracking issue.
+ */
+const UNKNOWN_TOOL_REJECTION = /^MCP error -32602: Tool .+ not found$/;
+
+/** True for the `$exception` PostHog emits when a caller names a tool that does not exist. */
+export const isUnknownToolRejection = (event: {
+  event: string;
+  properties: Record<string, unknown>;
+}): boolean => {
+  if (event.event !== PostHogMCPAnalyticsEvent.Exception) return false;
+  const list = event.properties.$exception_list;
+  if (!Array.isArray(list)) return false;
+  return list.some(
+    (entry) =>
+      typeof entry?.value === 'string' && UNKNOWN_TOOL_REJECTION.test(entry.value),
+  );
+};
+
+/**
+ * Drop the unknown-tool `$exception` before it reaches PostHog. Every other
+ * event still sends, including the `$mcp_tool_call` that records the miss.
+ */
+const beforeSend: BeforeSendFn = (event) =>
+  isUnknownToolRejection(event) ? null : event;
+
 /** Wire a server up for analytics. Safe to call when tracking is disabled. */
 export const instrumentServer = (server: unknown): void => {
   if (!client) return;
-  instrument(server, client);
+  instrument(server, client, { beforeSend });
 };
 
 export const shutdownAnalytics = async (): Promise<void> => {
