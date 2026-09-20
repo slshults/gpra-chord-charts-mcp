@@ -26,7 +26,7 @@
     "tablature"
   ],
   "engines": {
-    "node": ">=20"
+    "node": "^20.20.0 || >=22.22.0"
   },
   "bin": {
     "gpra-chord-charts-mcp": "dist/stdio.js"
@@ -51,7 +51,7 @@
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.5",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@posthog/mcp": "^0.11.6",
+    "@posthog/mcp": "^0.17.0",
     "@resvg/resvg-js": "^2.6.2",
     "express": "^5.1.0",
     "svgdom": "^0.1.28",

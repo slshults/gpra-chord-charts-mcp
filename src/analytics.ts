@@ -27,7 +27,13 @@ const client = API_KEY ? new PostHog(API_KEY, { host: HOST }) : null;
 /** Wire a server up for analytics. Safe to call when tracking is disabled. */
 export const instrumentServer = (server: unknown): void => {
   if (!client) return;
-  instrument(server, client);
+  // `enableConversationId` is on by default from @posthog/mcp 0.17. It adds a
+  // required `conversation_id` tool parameter, appends a prompt-back block to
+  // every result, and asks the agent to serialise its calls — buying cross-call
+  // session correlation for stateless HTTP servers. This server keeps nothing
+  // between calls, so correlation earns nothing and only clutters the minimal
+  // tool contract. Opt out to keep the contract the server has always shipped.
+  instrument(server, client, { enableConversationId: false });
 };
 
 export const shutdownAnalytics = async (): Promise<void> => {
