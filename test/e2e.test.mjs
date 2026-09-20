@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { isUnknownToolRejection } from '../dist/analytics.js';
 
 const serverPath = fileURLToPath(new URL('../dist/stdio.js', import.meta.url));
 const CONTEXT = 'automated test of the chord chart server';
@@ -397,6 +398,22 @@ test('a widget URI for a chord that does not exist fails cleanly', async () => {
     await assert.rejects(
       () => client.readResource({ uri: 'ui://gpra-chord-charts/chart/99999999' }),
       /No chord chart widget|not found/i,
+    );
+  });
+});
+
+// The analytics filter matches the SDK's exact unknown-tool wording, so drive
+// the real SDK: if a future version rewords it, this fails here instead of the
+// probe exceptions quietly coming back.
+test('the analytics filter recognises the SDK real unknown-tool rejection', async () => {
+  await withClient(async (client) => {
+    const result = await client.callTool({ name: '__verifymcp_auth_probe_deadbeef__', arguments: {} });
+    assert.ok(result.isError, 'an unknown tool must answer with an error result');
+    const message = textOf(result);
+    assert.match(message, /-32602/, 'still the invalid-params rejection');
+    assert.ok(
+      isUnknownToolRejection({ event: '$exception', properties: { $exception_list: [{ value: message }] } }),
+      `filter must recognise the SDK message: ${message}`,
     );
   });
 });

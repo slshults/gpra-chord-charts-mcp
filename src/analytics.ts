@@ -1,4 +1,4 @@
-import { instrument, PostHog } from '@posthog/mcp';
+import { instrument, PostHog, PostHogMCPAnalyticsEvent, type BeforeSendFn } from '@posthog/mcp';
 
 /**
  * Usage tracking.
@@ -24,6 +24,32 @@ const HOST = process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com';
 
 const client = API_KEY ? new PostHog(API_KEY, { host: HOST }) : null;
 
+/**
+ * The MCP SDK answers a call for a tool this server does not have with exactly
+ * `MCP error -32602: Tool <name> not found`. That is the correct protocol reply,
+ * not a fault, but `instrument()` still captures it as a `$exception` — and
+ * outside verifiers probe the public server with a fresh random tool name most
+ * days, so each miss opened its own error tracking issue.
+ */
+const UNKNOWN_TOOL_REJECTION = /^MCP error -32602: Tool .+ not found$/;
+
+/** True for the `$exception` PostHog emits when a caller names a tool that does not exist. */
+export const isUnknownToolRejection = (event: {
+  event: string;
+  properties: Record<string, unknown>;
+}): boolean => {
+  if (event.event !== PostHogMCPAnalyticsEvent.Exception) return false;
+  const list = event.properties.$exception_list;
+  if (!Array.isArray(list)) return false;
+  return list.some(
+    (entry) => typeof entry?.value === 'string' && UNKNOWN_TOOL_REJECTION.test(entry.value),
+  );
+};
+
+// Drop only that exception. Everything else still sends, including the
+// `$mcp_tool_call` event that records the miss itself.
+const beforeSend: BeforeSendFn = (event) => (isUnknownToolRejection(event) ? null : event);
+
 /** Wire a server up for analytics. Safe to call when tracking is disabled. */
 export const instrumentServer = (server: unknown): void => {
   if (!client) return;
@@ -33,7 +59,7 @@ export const instrumentServer = (server: unknown): void => {
   // session correlation for stateless HTTP servers. This server keeps nothing
   // between calls, so correlation earns nothing and only clutters the minimal
   // tool contract. Opt out to keep the contract the server has always shipped.
-  instrument(server, client, { enableConversationId: false });
+  instrument(server, client, { enableConversationId: false, beforeSend });
 };
 
 export const shutdownAnalytics = async (): Promise<void> => {
