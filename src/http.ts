@@ -4,6 +4,7 @@ import { analyticsEnabled, shutdownAnalytics } from './analytics.js';
 import { createServer, SERVER_NAME, SERVER_VERSION } from './server.js';
 import { getChordById, loadChords } from './data.js';
 import { chordPng } from './png.js';
+import { probedResourceUris, probeLogLine } from './probe.js';
 
 /**
  * Stateless streamable-HTTP endpoint: a fresh server + transport per request,
@@ -69,6 +70,13 @@ app.get('/chart/:file', async (req, res) => {
 });
 
 app.post('/mcp', async (req, res) => {
+  // nginx overwrites X-Real-IP with the connecting address, and the app only
+  // listens on loopback, so a client can't supply its own.
+  const ip = req.get('x-real-ip') ?? req.socket.remoteAddress ?? 'unknown';
+  for (const uri of probedResourceUris(req.body)) {
+    console.warn(probeLogLine(ip, uri));
+  }
+
   const server = createServer();
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
