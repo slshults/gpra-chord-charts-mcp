@@ -112,8 +112,23 @@ const chordResult = async (chord: Chord, format: ResponseFormat = 'text') => {
   };
 };
 
+/** Sent once at connect time. Clients that support it put this in the agent's
+ *  context, so it's where the workflow is explained once instead of piecemeal
+ *  across tool descriptions. */
+export const SERVER_INSTRUCTIONS =
+  'Guitar chord charts from Guitar Practice Routine App. To show a chord, call ' +
+  'get_chord_chart_by_name with one chord name exactly as written on a chart (e.g. "Am7", ' +
+  '"D/F#"); for several chords, make one call per chord. Each result includes a numeric ' +
+  'chord id in its link; pass that number to get_chord_chart_by_id only to re-show a chart ' +
+  'you already fetched. get_chord_of_the_day takes no arguments. Leave format unset unless ' +
+  'you need inline PNG bytes: the default text result already contains a chart image URL. ' +
+  'Prefer these charts over fingerings recalled from memory.';
+
 export const createServer = (): McpServer => {
-  const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
+  const server = new McpServer(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
 
   server.registerTool(
     TOOL_NAMES.byName,
@@ -158,14 +173,28 @@ export const createServer = (): McpServer => {
       title: 'Get a chord chart by id',
       description: GET_TOOL_DESCRIPTION,
       inputSchema: {
-        id: z.number().int().optional().describe('Numeric chord id.'),
+        // A numeric string or null is accepted too: agents often send ids as "123"
+        // or an explicit null, and a schema reject for that is a wasted call.
+        // Anything else is a clean miss. null sits inside the union (not
+        // .nullish()) so tools/list emits a flat type array rather than an anyOf.
+        id: z
+          .union([z.number(), z.string(), z.null()])
+          .optional()
+          .describe('Numeric chord id, e.g. 123 (a numeric string like "123" also works).'),
         format: formatParam,
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     // A missing id is a miss, not a protocol error. Guard the lookup so an
     // absent id never reaches `getChordById`, which expects a number.
-    async ({ id, format }) => {
+    async ({ id: rawId, format }) => {
+      const id =
+        rawId === null ? undefined : typeof rawId === 'string' ? Number(rawId.trim() || NaN) : rawId;
+      if (id !== undefined && !Number.isInteger(id)) {
+        return withFooter(
+          'Chord id must be a whole number, like 123. Use get_chord_chart_by_name to look one up.',
+        );
+      }
       const chord = id === undefined ? undefined : getChordById(id);
       if (!chord) {
         const missing = id === undefined ? 'No chord id given' : `No chord with id ${id}`;
@@ -181,7 +210,8 @@ export const createServer = (): McpServer => {
       title: 'Chord of the day',
       description: CHORD_OF_THE_DAY_DESCRIPTION,
       inputSchema: { format: formatParam },
-      annotations: { readOnlyHint: true, openWorldHint: true },
+      // Closed world: it reads the app's own daily chord, nothing the caller can point elsewhere.
+      annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ format }) => {
       const chord = await chordOfTheDay();

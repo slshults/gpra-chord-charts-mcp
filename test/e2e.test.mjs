@@ -159,6 +159,49 @@ test('id lookup round-trips from a name lookup', async () => {
   });
 });
 
+test('the server sends connect-time instructions', async () => {
+  await withClient(async (client) => {
+    const instructions = client.getInstructions();
+    assert.ok(instructions?.includes('get_chord_chart_by_name'), 'instructions explain the workflow');
+  });
+});
+
+test('a numeric-string id works like a number', async () => {
+  await withClient(async (client) => {
+    const asNumber = textOf(
+      await client.callTool({ name: 'get_chord_chart_by_id', arguments: { id: 1, context: CONTEXT } }),
+    );
+    const asString = textOf(
+      await client.callTool({ name: 'get_chord_chart_by_id', arguments: { id: ' 1 ', context: CONTEXT } }),
+    );
+    assert.equal(asString, asNumber);
+  });
+});
+
+test('a non-integer id is a clean miss, not a protocol error', async () => {
+  await withClient(async (client) => {
+    for (const id of ['Am', '1.5', 1.5, '', 'x'.repeat(500)]) {
+      const result = await client.callTool({
+        name: 'get_chord_chart_by_id',
+        arguments: { id, context: CONTEXT },
+      });
+      assert.ok(!result.isError, `id ${JSON.stringify(id).slice(0, 20)} should not be a schema reject`);
+      assert.ok(textOf(result).includes('Chord id must be a whole number'), 'explains the fix');
+    }
+  });
+});
+
+test('a null id reads as no id, not a protocol error', async () => {
+  await withClient(async (client) => {
+    const result = await client.callTool({
+      name: 'get_chord_chart_by_id',
+      arguments: { id: null, context: CONTEXT },
+    });
+    assert.ok(!result.isError);
+    assert.ok(textOf(result).includes('No chord id given'));
+  });
+});
+
 test('unknown id fails gracefully', async () => {
   await withClient(async (client) => {
     const text = textOf(
