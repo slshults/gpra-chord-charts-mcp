@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { isUnknownToolRejection } from '../dist/analytics.js';
+import { TOOL_NAMES } from '../dist/server.js';
 
 const serverPath = fileURLToPath(new URL('../dist/stdio.js', import.meta.url));
 const CONTEXT = 'automated test of the chord chart server';
@@ -49,6 +50,11 @@ test('server advertises its tools', async () => {
     assert.deepEqual(
       tools.map((t) => t.name).sort(),
       ['get_chord_chart_by_id', 'get_chord_chart_by_name', 'get_chord_of_the_day', 'send_feedback'],
+    );
+    // Analytics files any tool missing from TOOL_NAMES (plus send_feedback) as a probe.
+    assert.deepEqual(
+      tools.map((t) => t.name).filter((n) => n !== 'send_feedback').sort(),
+      Object.values(TOOL_NAMES).sort(),
     );
     for (const tool of tools.filter((t) => t.name !== 'send_feedback')) {
       // The minimal contract: analytics may add `context`, nothing else required.

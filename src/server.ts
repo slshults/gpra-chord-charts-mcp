@@ -21,6 +21,14 @@ import type { Chord } from './types.js';
 export const SERVER_NAME = 'gpra-chord-charts';
 export const SERVER_VERSION = '0.2.0';
 
+/** Every tool this server registers. Analytics records a call for any other
+ *  name as a probe, so a new tool must be registered through this list. */
+export const TOOL_NAMES = {
+  byName: 'get_chord_chart_by_name',
+  byId: 'get_chord_chart_by_id',
+  ofTheDay: 'get_chord_of_the_day',
+} as const;
+
 /** Long enough for the most baroque slash chord in the library (15 chars) with
  *  a little room; short enough that the query can't be used to push bulk text
  *  into a tool result. */
@@ -108,7 +116,7 @@ export const createServer = (): McpServer => {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
   server.registerTool(
-    'get_chord_chart_by_name',
+    TOOL_NAMES.byName,
     {
       title: 'Get a chord chart by name',
       description: SEARCH_TOOL_DESCRIPTION,
@@ -145,7 +153,7 @@ export const createServer = (): McpServer => {
   );
 
   server.registerTool(
-    'get_chord_chart_by_id',
+    TOOL_NAMES.byId,
     {
       title: 'Get a chord chart by id',
       description: GET_TOOL_DESCRIPTION,
@@ -168,7 +176,7 @@ export const createServer = (): McpServer => {
   );
 
   server.registerTool(
-    'get_chord_of_the_day',
+    TOOL_NAMES.ofTheDay,
     {
       title: 'Chord of the day',
       description: CHORD_OF_THE_DAY_DESCRIPTION,
@@ -187,6 +195,6 @@ export const createServer = (): McpServer => {
   );
 
   registerChordWidget(server);
-  instrumentServer(server);
+  instrumentServer(server, Object.values(TOOL_NAMES));
   return server;
 };
