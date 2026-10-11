@@ -51,7 +51,7 @@
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.5",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@posthog/mcp": "^0.17.0",
+    "@posthog/mcp": "^0.22.3",
     "@resvg/resvg-js": "^2.6.2",
     "express": "^5.1.0",
     "svgdom": "^0.1.28",

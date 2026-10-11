@@ -19,7 +19,7 @@ import { registerChordWidget, widgetUriFor } from './widget.js';
 import type { Chord } from './types.js';
 
 export const SERVER_NAME = 'gpra-chord-charts';
-export const SERVER_VERSION = '0.1.0';
+export const SERVER_VERSION = '0.2.0';
 
 /** Long enough for the most baroque slash chord in the library (15 chars) with
  *  a little room; short enough that the query can't be used to push bulk text

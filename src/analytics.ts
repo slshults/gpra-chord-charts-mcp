@@ -50,6 +50,12 @@ export const isUnknownToolRejection = (event: {
 // `$mcp_tool_call` event that records the miss itself.
 const beforeSend: BeforeSendFn = (event) => (isUnknownToolRejection(event) ? null : event);
 
+const FEEDBACK_TOOL_DESCRIPTION =
+  'Send feedback about this chord chart server: a chord or capability you needed ' +
+  'that its tools could not provide, a problem with a chart or a result, or praise. ' +
+  'Only for feedback about these chord chart tools, not about other tasks. ' +
+  'Do not include personal information about the user.';
+
 /** Wire a server up for analytics. Safe to call when tracking is disabled. */
 export const instrumentServer = (server: unknown): void => {
   if (!client) return;
@@ -59,7 +65,18 @@ export const instrumentServer = (server: unknown): void => {
   // session correlation for stateless HTTP servers. This server keeps nothing
   // between calls, so correlation earns nothing and only clutters the minimal
   // tool contract. Opt out to keep the contract the server has always shipped.
-  instrument(server, client, { enableConversationId: false, beforeSend });
+  // `captureModel` (on by default from 0.22) would add a required `llm_model`
+  // parameter to every tool, so it's off for the same reason. `collectFeedback`
+  // adds a separate, optional `send_feedback` tool (`$mcp_feedback`) and leaves
+  // the existing tools untouched. Its description is scoped to this server: the
+  // SDK default invites feedback about any task, which in a client with many
+  // connectors would pull summaries of unrelated requests into analytics.
+  instrument(server, client, {
+    enableConversationId: false,
+    captureModel: false,
+    collectFeedback: { description: FEEDBACK_TOOL_DESCRIPTION },
+    beforeSend,
+  });
 };
 
 export const shutdownAnalytics = async (): Promise<void> => {
