@@ -31,7 +31,9 @@ const client = API_KEY ? new PostHog(API_KEY, { host: HOST }) : null;
  * outside verifiers probe the public server with a fresh random tool name most
  * days, so each miss opened its own error tracking issue.
  */
-const UNKNOWN_TOOL_REJECTION = /^MCP error -32602: Tool .+ not found$/;
+// `.*`, not `.+`: an empty tool name is a miss too ("Tool  not found"); and
+// `s` so an invented name containing a newline still counts.
+const UNKNOWN_TOOL_REJECTION = /^(MCP error -32602: Tool ).*( not found)$/s;
 
 /** True for the `$exception` PostHog emits when a caller names a tool that does not exist. */
 export const isUnknownToolRejection = (event: {
@@ -46,9 +48,44 @@ export const isUnknownToolRejection = (event: {
   );
 };
 
-// Drop only that exception. Everything else still sends, including the
-// `$mcp_tool_call` event that records the miss itself.
-const beforeSend: BeforeSendFn = (event) => (isUnknownToolRejection(event) ? null : event);
+/**
+ * What a call for a tool this server doesn't have is recorded as.
+ *
+ * Probes invent a fresh random tool name almost every time, and the SDK records
+ * it verbatim, so each one became its own row in PostHog's MCP tool list and
+ * error rates, all failing, burying the real tools. Recording them under one
+ * name keeps the miss visible as a single row that's easy to filter out. The
+ * name asked for survives in `requested_tool_name` (as the SDK's own
+ * "Unknown Tool Name" placeholder when the caller sent an empty one).
+ */
+export const UNKNOWN_TOOL = '(unknown tool)';
+
+/** Re-files a `$mcp_tool_call` for an unregistered tool under {@link UNKNOWN_TOOL}. */
+export const bucketUnknownTool = <E extends { event: string; properties: Record<string, unknown> }>(
+  event: E,
+  knownTools: ReadonlySet<string>,
+): E => {
+  if (event.event !== PostHogMCPAnalyticsEvent.ToolCall) return event;
+  const requested = event.properties.$mcp_tool_name;
+  if (typeof requested !== 'string' || knownTools.has(requested)) return event;
+
+  const properties: Record<string, unknown> = {
+    ...event.properties,
+    $mcp_tool_name: UNKNOWN_TOOL,
+    $mcp_resource_name: UNKNOWN_TOOL,
+    requested_tool_name: requested,
+  };
+  // The SDK's message repeats the invented name, which would split the failure
+  // breakdown the same way the tool list was split. Matched by shape rather
+  // than by `requested`, because the SDK truncates the two fields separately.
+  if (typeof properties.$mcp_error_message === 'string') {
+    properties.$mcp_error_message = properties.$mcp_error_message.replace(
+      UNKNOWN_TOOL_REJECTION,
+      '$1<name>$2',
+    );
+  }
+  return { ...event, properties };
+};
 
 const FEEDBACK_TOOL_DESCRIPTION =
   'Send feedback about this chord chart server: a chord or capability you needed ' +
@@ -56,9 +93,20 @@ const FEEDBACK_TOOL_DESCRIPTION =
   'Only for feedback about these chord chart tools, not about other tasks. ' +
   'Do not include personal information about the user.';
 
-/** Wire a server up for analytics. Safe to call when tracking is disabled. */
-export const instrumentServer = (server: unknown): void => {
+/** Wire a server up for analytics. Safe to call when tracking is disabled.
+ *  `toolNames` is every tool the server registers; a call for any other name
+ *  is recorded as a probe. */
+export const instrumentServer = (server: unknown, toolNames: readonly string[]): void => {
   if (!client) return;
+  // `send_feedback` is served by the SDK (collectFeedback), not registered by
+  // the server. Normally it's emitted as `$mcp_feedback` and never reaches the
+  // bucketing; listing it keeps it out of `(unknown tool)` if the SDK ever falls
+  // back to ordinary dispatch.
+  const knownTools = new Set([...toolNames, 'send_feedback']);
+  // Drop only the unknown-tool exception. Everything else still sends,
+  // including the `$mcp_tool_call` event that records the miss itself.
+  const beforeSend: BeforeSendFn = (event) =>
+    isUnknownToolRejection(event) ? null : bucketUnknownTool(event, knownTools);
   // `enableConversationId` is on by default from @posthog/mcp 0.17. It adds a
   // required `conversation_id` tool parameter, appends a prompt-back block to
   // every result, and asks the agent to serialise its calls — buying cross-call
