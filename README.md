@@ -42,6 +42,7 @@ the charts on the site.
 | `get_chord_chart_by_name` | One chord name (`G`, `Am7`, `D/F#`) → the one chart the website shows for it. |
 | `get_chord_chart_by_id` | The same chart by its numeric id, for re-rendering something already returned. |
 | `get_chord_of_the_day` | Today's Chord of the Day — the same chord GPRA posts to Bluesky and Facebook. |
+| `send_feedback` | Lets an agent report a missing chord or capability, a problem, or praise. Added by the analytics SDK; only present when analytics is on. |
 
 Each result **leads with a direct PNG URL** for the chart, then the same chart as
 a fenced text grid. The URL is the picture in the form that survives every
@@ -182,8 +183,13 @@ The hosted server records anonymous usage analytics through
 [`@posthog/mcp`](https://www.npmjs.com/package/@posthog/mcp): which tool was
 called, how long it took, whether it errored, the calling client's identity
 (name and version on connect, user-agent on each call), and the `context` string
-the agent supplied describing why it called. No personal identifier is stored and
-no person profile is created.
+the agent supplied describing why it called. Calls from a client that echoes the
+`Mcp-Session-Id` header are grouped into one analytics session; the header is an
+unsigned token carrying the client's name, version and protocol version. If an
+agent uses `send_feedback`, its free-text feedback is recorded too, with
+credentials, emails, phone numbers and URLs redacted and each field capped at
+2,048 characters. No personal identifier is stored and no person profile is
+created.
 
 Analytics are off entirely unless `POSTHOG_API_KEY` is set, so running this
 yourself — including over stdio — sends nothing anywhere.

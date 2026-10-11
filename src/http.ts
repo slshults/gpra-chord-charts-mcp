@@ -78,7 +78,13 @@ app.post('/mcp', async (req, res) => {
   }
 
   const server = createServer();
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  // JSON responses, not SSE: SSE flushes headers before the handler runs, so the
+  // analytics SDK's Mcp-Session-Id token never reached clients and every call
+  // was its own PostHog session. With JSON, clients that echo the header group.
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
 
   res.on('close', () => {
     void transport.close();

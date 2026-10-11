@@ -45,11 +45,18 @@ const textOf = (result) =>
 test('server advertises its tools', async () => {
   await withClient(async (client) => {
     const { tools } = await client.listTools();
+    // `send_feedback` is served by the analytics SDK (collectFeedback).
     assert.deepEqual(
       tools.map((t) => t.name).sort(),
-      ['get_chord_chart_by_id', 'get_chord_chart_by_name', 'get_chord_of_the_day'],
+      ['get_chord_chart_by_id', 'get_chord_chart_by_name', 'get_chord_of_the_day', 'send_feedback'],
     );
-    for (const tool of tools) {
+    for (const tool of tools.filter((t) => t.name !== 'send_feedback')) {
+      // The minimal contract: analytics may add `context`, nothing else required.
+      assert.deepEqual(
+        (tool.inputSchema.required ?? []).filter((k) => k === 'llm_model' || k === 'conversation_id'),
+        [],
+        `${tool.name} must not require llm_model or conversation_id`,
+      );
       assert.ok(tool.description?.length > 40, `${tool.name} needs a description`);
       assert.ok(
         tool.inputSchema.properties.context,
