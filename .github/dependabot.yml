@@ -1,0 +1,22 @@
+# Keep the PostHog SDK current. PostHog's SDK Doctor flags this server
+# when @posthog/mcp (and the posthog-node it wraps) falls behind.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Phoenix"
+    allow:
+      - dependency-name: "@posthog/*"
+      - dependency-name: "posthog-node"
+    groups:
+      posthog:
+        patterns:
+          - "@posthog/*"
+          - "posthog-node"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "chore(deps)"
