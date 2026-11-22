@@ -1,5 +1,7 @@
 # Keep the PostHog SDK current. PostHog's SDK Doctor flags this server
 # when @posthog/mcp (and the posthog-node it wraps) falls behind.
+# .github/workflows/dependabot-auto-merge.yml merges these PRs when they
+# change nothing but PostHog package versions.
 version: 2
 updates:
   - package-ecosystem: "npm"
@@ -18,5 +20,12 @@ updates:
           - "@posthog/*"
           - "posthog-node"
     open-pull-requests-limit: 2
+    # Wait 7 days after a release before proposing it, so a bad or
+    # compromised release has time to be caught and yanked (PostHog's
+    # Shai-Hulud post-mortem suggests at least 3; GitHub's default is 3).
+    # Security updates skip the cooldown. To take a version sooner, bump it
+    # by hand.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(deps)"
